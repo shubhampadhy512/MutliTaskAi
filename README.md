@@ -155,9 +155,9 @@ Make sure you have installed:
 ### 2. Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/MultiTaskAI.git
+git clone https://github.com/shubhampadhy512/MutliTaskAi.git
 
-cd MultiTaskAI
+cd MutliTaskAi
 ```
 
 ### 3. Configure Environment Variables
