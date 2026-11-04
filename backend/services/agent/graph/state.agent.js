@@ -1,7 +1,7 @@
-import { Annaotation } from "@langchain/langgraph"
+import { Annotation } from "@langchain/langgraph"
 
 
-export const agentState = Annaotation.Root({
-    prompt: Annaotation(),
-    aiResponse: Annaotation()
+export const agentState = Annotation.Root({
+    prompt: Annotation(),
+    aiResponse: Annotation()
 })
