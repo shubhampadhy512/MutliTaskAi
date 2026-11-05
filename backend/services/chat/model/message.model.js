@@ -9,7 +9,13 @@ const messageSchema = await mongoose.Schema({
         type:String,
         enum:['user','ai']
     },
-    content:String
+    content:String,
+    artifact:{
+        title:String,
+        language:String,
+        code:String,
+        previewable:Boolean
+    }
 },{timestamps:true})
 
 const Message = mongoose.model("Message",messageSchema)

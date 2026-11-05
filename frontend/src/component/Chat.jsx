@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { BrandMark, UserAvatar } from './WorkspacePrimitives.jsx'
+import { extractCodeArtifacts } from './artifactUtils.js'
 
 const prompts = [
   {
@@ -46,6 +47,7 @@ function Chat({
   chatError,
   onSendMessage,
   onEditMessage,
+  onOpenArtifact,
 }) {
   const [copiedMessageIndex, setCopiedMessageIndex] = useState(null)
   const [copyErrorIndex, setCopyErrorIndex] = useState(null)
@@ -151,7 +153,7 @@ function Chat({
             ) : (
               <div className="assistant-message" key={`assistant-${index}`}>
                 <span className="assistant-avatar"><BrandMark /></span>
-                <div>
+                <div className="assistant-message-content">
                   <p className="assistant-name">Multitask AI <span>· Just now</span></p>
                   <div className="assistant-markdown">
                     <ReactMarkdown
@@ -172,6 +174,22 @@ function Chat({
                       {chatMessage.content}
                     </ReactMarkdown>
                   </div>
+                  {extractCodeArtifacts(chatMessage.content, index, chatMessage.artifact).length > 0 && (
+                    <div className="message-artifacts" aria-label="Generated files">
+                      {extractCodeArtifacts(chatMessage.content, index, chatMessage.artifact).map((artifact) => (
+                        <button
+                          className="message-artifact-file"
+                          key={artifact.id}
+                          type="button"
+                          onClick={() => onOpenArtifact(artifact)}
+                        >
+                          <span className="message-artifact-icon" aria-hidden="true">{'{ }'}</span>
+                          <span>{artifact.name}</span>
+                          <span aria-hidden="true">↗</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="message-actions">
                     <button
                       type="button"

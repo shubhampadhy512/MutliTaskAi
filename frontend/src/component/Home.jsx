@@ -1,31 +1,32 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { api } from '../../utils/axios'
 import '../style/Home.css'
 import Login from './Login.jsx'
 import Chat from './Chat.jsx'
+import ArtifactPanel from './ArtifactPanel.jsx'
 import { BrandMark, UserAvatar } from './WorkspacePrimitives.jsx'
 import { useDispatch } from 'react-redux'
 import { UserInfo } from '../feature/user.js'
-
-const conversations = [
-  'Plan a productive week',
-  'Ideas for a birthday gift',
-  'Explain machine learning',
-  'Write a project update',
-]
 
 function Home() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
-  const [search, setSearch] = useState('')
   const [activeConversation, setActiveConversation] = useState('')
   const [conversationId, setConversationId] = useState('')
+  const [conversations, setConversations] = useState([])
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false)
+  const [historyError, setHistoryError] = useState('')
   const [messages, setMessages] = useState([])
   const [isSending, setIsSending] = useState(false)
   const [chatError, setChatError] = useState('')
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
+  const [isArtifactPanelOpen, setIsArtifactPanelOpen] = useState(false)
+  const [artifactPanelWidth, setArtifactPanelWidth] = useState(360)
+  const [isResizingArtifacts, setIsResizingArtifacts] = useState(false)
+  const [artifactTab, setArtifactTab] = useState('code')
+  const [selectedArtifact, setSelectedArtifact] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
   const dispatch = useDispatch();
   // const selector = useSelector((prev) => prev.user)
@@ -35,9 +36,87 @@ function Home() {
     setActiveConversation('')
     setConversationId('')
     setMessages([])
+    setSelectedArtifact(null)
+    setIsArtifactPanelOpen(false)
     setChatError('')
     setMessage('')
   }
+
+  const showArtifact = (artifact) => {
+    setSelectedArtifact(artifact)
+    setArtifactTab('code')
+    setIsArtifactPanelOpen(true)
+  }
+
+  const resizeArtifactPanelBy = (delta) => {
+    const mobileLayout = window.innerWidth <= 760
+    const overlayLayout = window.innerWidth <= 900
+    const sidebarWidth = window.innerWidth > 1200 ? 284 : 260
+    const maxWidth = mobileLayout
+      ? window.innerWidth - 24
+      : overlayLayout
+        ? window.innerWidth - sidebarWidth
+        : window.innerWidth - sidebarWidth - 280
+    const nextWidth = artifactPanelWidth + delta
+
+    setArtifactPanelWidth(
+      Math.max(mobileLayout ? 240 : 280, Math.min(nextWidth, maxWidth)),
+    )
+  }
+
+  useEffect(() => {
+    if (!isResizingArtifacts) return undefined
+
+    const handlePointerMove = (event) => {
+      const mobileLayout = window.innerWidth <= 760
+      const overlayLayout = window.innerWidth <= 900
+      const sidebarWidth = window.innerWidth > 1200 ? 284 : 260
+      const maxWidth = mobileLayout
+        ? window.innerWidth - 24
+        : overlayLayout
+          ? window.innerWidth - sidebarWidth
+          : window.innerWidth - sidebarWidth - 280
+      const nextWidth = window.innerWidth - event.clientX
+
+      setArtifactPanelWidth(Math.max(mobileLayout ? 240 : 280, Math.min(nextWidth, maxWidth)))
+    }
+
+    const stopResizing = () => setIsResizingArtifacts(false)
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', stopResizing)
+    window.addEventListener('pointercancel', stopResizing)
+
+    return () => {
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', stopResizing)
+      window.removeEventListener('pointercancel', stopResizing)
+    }
+  }, [isResizingArtifacts])
+
+  const loadConversations = useCallback(async () => {
+    setIsLoadingConversations(true)
+    setHistoryError('')
+
+    try {
+      const { data } = await api.get('/chat/get-conversation')
+      if (!Array.isArray(data)) {
+        throw new Error('The chat service returned an invalid conversation list.')
+      }
+      setConversations(data)
+    } catch (error) {
+      console.error('Unable to load chat history:', error)
+      setHistoryError(
+        error.response?.data?.message || error.message || 'Unable to load chat history.',
+      )
+    } finally {
+      setIsLoadingConversations(false)
+    }
+  }, [])
 
   useEffect(() => {
     const getUser = async () => {
@@ -45,6 +124,7 @@ function Home() {
         const response = await api.get('/getuser')
         setUser(response.data.data)
         dispatch(UserInfo(response.data.data))
+        await loadConversations()
       } catch (error) {
         console.error('Unable to fetch the current user:', error)
         setUser(null)
@@ -54,7 +134,7 @@ function Home() {
     }
 
     getUser()
-  }, [dispatch])
+  }, [dispatch, loadConversations])
   // console.log(user)
   const handleLogout = async () => {
     setErrorMessage('')
@@ -94,6 +174,23 @@ function Home() {
         }
 
         setConversationId(activeConversationId)
+        const newConversation = {
+          ...data,
+          title: prompt,
+        }
+        setConversations((currentConversations) => [
+          newConversation,
+          ...currentConversations.filter((conversation) => conversation._id !== activeConversationId),
+        ])
+        try {
+          await api.post('/chat/update-message', {
+            id: activeConversationId,
+            title: prompt,
+          })
+        } catch (error) {
+          console.error('Unable to save conversation title:', error)
+          setHistoryError('The conversation started, but its title could not be saved.')
+        }
       }
 
       const { data } = await api.post('/agent/chat', {
@@ -108,12 +205,49 @@ function Home() {
 
       setMessages((currentMessages) => [
         ...currentMessages,
-        { role: 'assistant', content: response },
+        { role: 'assistant', content: response, artifact: data?.artifact || null },
       ])
     } catch (error) {
       console.error('Unable to send chat message:', error)
       setChatError(
         error.response?.data?.message || error.message || 'Unable to send your message. Please try again.',
+      )
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  const handleSelectConversation = async (conversation) => {
+    const selectedConversationId = conversation?._id
+    if (!selectedConversationId || isSending) return
+
+    setConversationId(selectedConversationId)
+    setActiveConversation(conversation.title || 'New Chat')
+    setMessages([])
+    setMessage('')
+    setChatError('')
+    setSelectedArtifact(null)
+    setIsArtifactPanelOpen(false)
+    setIsSending(true)
+
+    try {
+      const { data } = await api.post('/chat/get-message', {
+        conversationId: selectedConversationId,
+      })
+
+      if (!Array.isArray(data)) {
+        throw new Error('The chat service returned an invalid message list.')
+      }
+
+      setMessages(data.slice().reverse().map((chatMessage) => ({
+        role: chatMessage.role === 'ai' ? 'assistant' : chatMessage.role,
+        content: chatMessage.content,
+        artifact: chatMessage.artifact || null,
+      })))
+    } catch (error) {
+      console.error('Unable to load conversation messages:', error)
+      setChatError(
+        error.response?.data?.message || error.message || 'Unable to load this conversation.',
       )
     } finally {
       setIsSending(false)
@@ -132,9 +266,6 @@ function Home() {
     setChatError('')
   }
 
-  const filteredConversations = conversations.filter((conversation) =>
-    conversation.toLowerCase().includes(search.toLowerCase()),
-  )
   const displayName = user?.name?.trim() || user?.email?.split('@')[0] || 'My workspace'
   const firstName = displayName.split(/\s+/)[0]
   const initials = displayName
@@ -168,7 +299,10 @@ function Home() {
   }
 
   return (
-    <main className="ai-workspace">
+    <main
+      className={`ai-workspace${isArtifactPanelOpen ? ' artifacts-open' : ''}${isResizingArtifacts ? ' artifacts-resizing' : ''}`}
+      style={{ '--artifact-width': `${artifactPanelWidth}px` }}
+    >
       <aside className="ai-sidebar">
         <a className="ai-brand" href="/home" aria-label="MultiTask AI home">
           <span className="ai-brand-mark"><BrandMark /></span>
@@ -181,63 +315,49 @@ function Home() {
           <kbd>⌘ K</kbd>
         </button>
 
-        <label className="chat-search">
-          <span aria-hidden="true">⌕</span>
-          <input
-            type="search"
-            placeholder="Search chats"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            aria-label="Search conversations"
-          />
-          <span className="search-shortcut" aria-hidden="true">⌘ F</span>
-        </label>
-
-        <div className="sidebar-section">
-          <p className="sidebar-heading">WORKSPACE</p>
-          <button className="sidebar-link selected" type="button" onClick={startNewChat}>
-            <span className="sidebar-link-icon" aria-hidden="true">✧</span>
-            AI Assistant
-          </button>
-          <button className="sidebar-link" type="button">
-            <span className="sidebar-link-icon" aria-hidden="true">▤</span>
-            Library
-          </button>
-        </div>
-
         <div className="recent-section">
           <div className="recent-heading">
-            <p className="sidebar-heading">RECENT</p>
-            <button type="button" aria-label="More recent chat options">···</button>
+            <p className="sidebar-heading">CHAT HISTORY</p>
+            <button
+              type="button"
+              aria-label="Refresh chat history"
+              title="Refresh chat history"
+              onClick={loadConversations}
+              disabled={isLoadingConversations}
+            >
+              ↻
+            </button>
           </div>
-          <nav className="conversation-list" aria-label="Recent conversations">
-            {filteredConversations.map((conversation) => (
-              <button
-                className={`conversation-link${activeConversation === conversation ? ' active' : ''}`}
-                key={conversation}
-                type="button"
-                onClick={() => setActiveConversation(conversation)}
-                title={conversation}
-              >
-                <span aria-hidden="true">◷</span>
-                <span>{conversation}</span>
-              </button>
-            ))}
-            {filteredConversations.length === 0 && (
-              <p className="empty-search">No matching chats</p>
-            )}
-          </nav>
+          {historyError && <p className="history-error" role="alert">{historyError}</p>}
+          {isLoadingConversations && conversations.length === 0 ? (
+            <p className="history-status" role="status">Loading chats…</p>
+          ) : (
+            <nav className="conversation-list" aria-label="Chat history">
+              {conversations.map((conversation) => (
+                <button
+                  className={`conversation-link${conversationId === conversation._id ? ' active' : ''}`}
+                  key={conversation._id}
+                  type="button"
+                  onClick={() => handleSelectConversation(conversation)}
+                  disabled={isSending}
+                  title={conversation.title || 'New Chat'}
+                >
+                  <span aria-hidden="true">◷</span>
+                  <span>
+                    {conversation.title === 'New Chat' && conversation._id === conversationId
+                      ? activeConversation
+                      : conversation.title || 'New Chat'}
+                  </span>
+                </button>
+              ))}
+              {!isLoadingConversations && conversations.length === 0 && !historyError && (
+                <p className="history-status">Your chats will appear here.</p>
+              )}
+            </nav>
+          )}
         </div>
 
         <div className="sidebar-bottom">
-          <div className="plan-card">
-            <span className="plan-card-icon"><BrandMark /></span>
-            <div>
-              <p>Make more with AI</p>
-              <span>Discover what you can do</span>
-            </div>
-            <span className="plan-card-arrow" aria-hidden="true">→</span>
-          </div>
           {errorMessage && <p className="logout-error" role="alert">{errorMessage}</p>}
           <div className="account-menu">
             <button
@@ -284,7 +404,18 @@ function Home() {
         chatError={chatError}
         onSendMessage={handleSendMessage}
         onEditMessage={handleEditMessage}
+        onOpenArtifact={showArtifact}
       />
+      {isArtifactPanelOpen && selectedArtifact && (
+        <ArtifactPanel
+          artifact={selectedArtifact}
+          activeTab={artifactTab}
+          onTabChange={setArtifactTab}
+          onClose={() => setIsArtifactPanelOpen(false)}
+          onResizeStart={() => setIsResizingArtifacts(true)}
+          onResizeBy={resizeArtifactPanelBy}
+        />
+      )}
     </main>
   )
 }

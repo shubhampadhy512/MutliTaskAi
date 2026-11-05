@@ -16,7 +16,15 @@ export const Agent = async (req, res) => {
 
         const response = await formatResponse(result.aiResponse)
 
-        return res.status(200).json(response)
+        await axios.post(`${process.env.CHAT_Service_URL}/save-message`, {
+            conversationId, role: 'ai', content: response, artifact: result.artifact || null
+        })
+
+        console.log(response)
+        return res.status(200).json({
+            aiResponse: response,
+            artifact: result.artifact || null
+        })
 
     } catch (err) {
         return res.status(500).json({
