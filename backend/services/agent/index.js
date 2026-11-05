@@ -1,22 +1,31 @@
-
 import dns from "dns";
-dns.setServers(["8.8.8.8", "1.1.1.1"]); import express from "express";
-import dotenv from "dotenv";
-import connectDB from "./config/connectdb.js";
-// import router from "./router/chat.router.js";
-// import cookieParser from "cookie-parser";
+dns.setServers(["8.8.8.8", "1.1.1.1"]);
 
-dotenv.config();
+import express from "express";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+dotenv.config({
+    path: path.join(__dirname, ".env"),
+});
+
+
+const { default: connectDB } = await import("./config/connectdb.js");
+const { default: router } = await import("./routes/agent.route.js");
 
 const app = express();
-app.use(express.json());
-// app.use('/',router)
 
-app.get('/', (req, res) => {
-    res.send("Agent Service is running")
-})
+app.use(express.json());
+app.use("/", router);
+
+app.get("/", (req, res) => {
+    res.send("Agent service is running");
+});
 
 app.listen(process.env.PORT || 8002, () => {
-    console.log(`Agent service is running on this port ${process.env.PORT || 8003}`)
+    console.log(`Agent service is running on port ${process.env.PORT || 8002}`);
     connectDB();
-})
+});
