@@ -20,6 +20,10 @@ function Home() {
   const [message, setMessage] = useState('')
   const [search, setSearch] = useState('')
   const [activeConversation, setActiveConversation] = useState('')
+  const [conversationId, setConversationId] = useState('')
+  const [messages, setMessages] = useState([])
+  const [isSending, setIsSending] = useState(false)
+  const [chatError, setChatError] = useState('')
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -29,6 +33,9 @@ function Home() {
 
   const startNewChat = () => {
     setActiveConversation('')
+    setConversationId('')
+    setMessages([])
+    setChatError('')
     setMessage('')
   }
 
@@ -57,14 +64,72 @@ function Home() {
     try {
       await api.get('/auth/logout')
       setUser(null) // switches the UI back to <Login />
-      setActiveConversation('')
-      setMessage('')
+      startNewChat()
     } catch (error) {
       console.error('Error during logout:', error)
       setErrorMessage('Unable to log out right now. Please try again.')
     } finally {
       setIsLoggingOut(false)
     }
+  }
+
+  const handleSendMessage = async (prompt) => {
+    if (isSending) return
+
+    setMessage('')
+    setChatError('')
+    setMessages((currentMessages) => [...currentMessages, { role: 'user', content: prompt }])
+    setActiveConversation((currentConversation) => currentConversation || prompt)
+    setIsSending(true)
+
+    try {
+      let activeConversationId = conversationId
+
+      if (!activeConversationId) {
+        const { data } = await api.get('/chat/create-conversation')
+        activeConversationId = data?._id
+
+        if (typeof activeConversationId !== 'string' || !activeConversationId) {
+          throw new Error('The chat service did not return a conversation ID.')
+        }
+
+        setConversationId(activeConversationId)
+      }
+
+      const { data } = await api.post('/agent/chat', {
+        conversationId: activeConversationId,
+        prompt,
+      })
+      const response = typeof data === 'string' ? data : data?.aiResponse ?? data?.response
+
+      if (typeof response !== 'string' || !response.trim()) {
+        throw new Error('The agent service returned an empty response.')
+      }
+
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        { role: 'assistant', content: response },
+      ])
+    } catch (error) {
+      console.error('Unable to send chat message:', error)
+      setChatError(
+        error.response?.data?.message || error.message || 'Unable to send your message. Please try again.',
+      )
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  const handleEditMessage = (messageIndex, content) => {
+    const previousMessages = messages.slice(0, messageIndex)
+    const previousPrompt = [...previousMessages]
+      .reverse()
+      .find((chatMessage) => chatMessage.role === 'user')?.content || ''
+
+    setMessages(previousMessages)
+    setActiveConversation(previousPrompt)
+    setMessage(content)
+    setChatError('')
   }
 
   const filteredConversations = conversations.filter((conversation) =>
@@ -212,9 +277,13 @@ function Home() {
         initials={initials}
         firstName={firstName}
         activeConversation={activeConversation}
-        setActiveConversation={setActiveConversation}
         message={message}
         setMessage={setMessage}
+        messages={messages}
+        isSending={isSending}
+        chatError={chatError}
+        onSendMessage={handleSendMessage}
+        onEditMessage={handleEditMessage}
       />
     </main>
   )

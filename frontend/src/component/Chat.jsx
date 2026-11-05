@@ -1,3 +1,6 @@
+import { useEffect, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { BrandMark, UserAvatar } from './WorkspacePrimitives.jsx'
 
 const prompts = [
@@ -36,17 +39,55 @@ function Chat({
   initials,
   firstName,
   activeConversation,
-  setActiveConversation,
   message,
   setMessage,
+  messages,
+  isSending,
+  chatError,
+  onSendMessage,
+  onEditMessage,
 }) {
+  const [copiedMessageIndex, setCopiedMessageIndex] = useState(null)
+  const [copyErrorIndex, setCopyErrorIndex] = useState(null)
+  const chatContentRef = useRef(null)
+  const composerRef = useRef(null)
+
+  useEffect(() => {
+    const chatContent = chatContentRef.current
+    if (!chatContent) return
+
+    chatContent.scrollTo({
+      top: chatContent.scrollHeight,
+      behavior: 'smooth',
+    })
+  }, [messages, isSending])
+
+  useEffect(() => {
+    const composer = composerRef.current
+    if (!composer) return
+
+    composer.style.height = 'auto'
+    composer.style.height = `${Math.min(composer.scrollHeight, 150)}px`
+  }, [message])
+
   const handleSubmit = (event) => {
     event.preventDefault()
     const trimmedMessage = message.trim()
-    if (!trimmedMessage) return
+    if (!trimmedMessage || isSending) return
 
-    setActiveConversation(trimmedMessage)
-    setMessage('')
+    onSendMessage(trimmedMessage)
+  }
+
+  const handleCopy = async (content, index) => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopiedMessageIndex(index)
+      setCopyErrorIndex(null)
+    } catch (error) {
+      console.error('Unable to copy message:', error)
+      setCopyErrorIndex(index)
+      setCopiedMessageIndex(null)
+    }
   }
 
   return (
@@ -63,19 +104,123 @@ function Chat({
         </button>
       </header>
 
-      <div className="chat-content">
-        {activeConversation ? (
+      <div className="chat-content" ref={chatContentRef}>
+        {messages.length > 0 ? (
+          <div className="conversation-view">
+            {messages.map((chatMessage, index) => chatMessage.role === 'user' ? (
+              <div className="user-message" key={`user-${index}`}>
+                <UserAvatar className="message-avatar" user={user} initials={initials} />
+                <div className="user-message-content">
+                  <p>{chatMessage.content}</p>
+                  <div className="message-actions">
+                    <button
+                      type="button"
+                      aria-label={copiedMessageIndex === index ? 'Message copied' : 'Copy message'}
+                      title={copiedMessageIndex === index ? 'Copied' : 'Copy'}
+                      onClick={() => handleCopy(chatMessage.content, index)}
+                    >
+                      {copiedMessageIndex === index ? (
+                        <svg viewBox="0 0 20 20" aria-hidden="true">
+                          <path d="m4 10 4 4 8-8" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 20 20" aria-hidden="true">
+                          <rect x="7" y="7" width="9" height="10" rx="1.5" />
+                          <path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v7A1.5 1.5 0 0 0 5.5 14H7" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Edit message"
+                      title="Edit"
+                      onClick={() => onEditMessage(index, chatMessage.content)}
+                      disabled={isSending}
+                    >
+                      <svg viewBox="0 0 20 20" aria-hidden="true">
+                        <path d="m13.8 4.2 2 2a1.4 1.4 0 0 1 0 2l-7.9 7.9-3.5.8.8-3.5 7.9-7.9a1.4 1.4 0 0 1 2 0Z" />
+                        <path d="m12.5 5.5 2 2" />
+                      </svg>
+                    </button>
+                    {copyErrorIndex === index && (
+                      <span role="status">Copy failed</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="assistant-message" key={`assistant-${index}`}>
+                <span className="assistant-avatar"><BrandMark /></span>
+                <div>
+                  <p className="assistant-name">Multitask AI <span>· Just now</span></p>
+                  <div className="assistant-markdown">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        table: (props) => {
+                          const tableProps = { ...props }
+                          delete tableProps.node
+
+                          return (
+                            <div className="assistant-table-wrap">
+                              <table {...tableProps} />
+                            </div>
+                          )
+                        },
+                      }}
+                    >
+                      {chatMessage.content}
+                    </ReactMarkdown>
+                  </div>
+                  <div className="message-actions">
+                    <button
+                      type="button"
+                      aria-label={copiedMessageIndex === index ? 'Message copied' : 'Copy message'}
+                      title={copiedMessageIndex === index ? 'Copied' : 'Copy'}
+                      onClick={() => handleCopy(chatMessage.content, index)}
+                    >
+                      {copiedMessageIndex === index ? (
+                        <svg viewBox="0 0 20 20" aria-hidden="true">
+                          <path d="m4 10 4 4 8-8" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 20 20" aria-hidden="true">
+                          <rect x="7" y="7" width="9" height="10" rx="1.5" />
+                          <path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v7A1.5 1.5 0 0 0 5.5 14H7" />
+                        </svg>
+                      )}
+                    </button>
+                    {copyErrorIndex === index && (
+                      <span role="status">Copy failed</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {isSending && (
+              <div className="assistant-message" role="status">
+                <span className="assistant-avatar"><BrandMark /></span>
+                <div>
+                  <p className="assistant-name">Multitask AI</p>
+                  <p className="assistant-placeholder assistant-thinking">Thinking…</p>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : activeConversation ? (
           <div className="conversation-view">
             <div className="user-message">
               <UserAvatar className="message-avatar" user={user} initials={initials} />
-              <p>{activeConversation}</p>
+              <div className="user-message-content">
+                <p>{activeConversation}</p>
+              </div>
             </div>
             <div className="assistant-message">
               <span className="assistant-avatar"><BrandMark /></span>
               <div>
                 <p className="assistant-name">Multitask AI <span>· Just now</span></p>
                 <p className="assistant-placeholder">
-                  Your message is ready. Connect an AI service to generate a response here.
+                  Select New chat to start a conversation.
                 </p>
               </div>
             </div>
@@ -116,8 +261,10 @@ function Chat({
       </div>
 
       <div className="composer-area">
+        {chatError && <p className="chat-error" role="alert">{chatError}</p>}
         <form className="message-composer" onSubmit={handleSubmit}>
           <textarea
+            ref={composerRef}
             aria-label="Message Multitask AI"
             placeholder="Message Multitask AI..."
             rows="1"
@@ -144,7 +291,7 @@ function Chat({
               <button
                 className="send-button"
                 type="submit"
-                disabled={!message.trim()}
+                disabled={!message.trim() || isSending}
                 aria-label="Send message"
                 title="Send message"
               >

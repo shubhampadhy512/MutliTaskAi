@@ -1,5 +1,6 @@
 import axios from "axios"
 import { graph } from "../graph/graph.js"
+import { formatResponse } from "../config/responseFormatter.js"
 
 export const Agent = async (req, res) => {
     try {
@@ -13,7 +14,7 @@ export const Agent = async (req, res) => {
             prompt, conversationId
         })
 
-        const response = result.aiResponse
+        const response = await formatResponse(result.aiResponse)
 
         return res.status(200).json(response)
 

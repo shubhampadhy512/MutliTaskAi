@@ -1,6 +1,6 @@
 import { getModel } from "../config/LLmModels.js"
 
-export const chatagent = async (params) => {
+export const chatagent = async (state) => {
     const llm = await getModel("chat")
     const SystemPrompt = 'You are MultiTaskAi, An Intelligent Ai assistant.'
 
