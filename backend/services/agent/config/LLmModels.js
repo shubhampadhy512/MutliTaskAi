@@ -1,50 +1,45 @@
-import { ChatGroq } from "@langchain/groq"
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
-import { TavilySearch } from "@langchain/tavily"
-import { ChatDeepSeek } from "@langchain/deepseek";
+import { ChatGroq } from "@langchain/groq";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { TavilySearch } from "@langchain/tavily";
 import { ChatOpenAI } from "@langchain/openai";
 
 const groq = new ChatGroq({
     model: "openai/gpt-oss-120b",
-    apiKey: process.env.GROQ_API_KEY
-})
+    apiKey: process.env.GROQ_API_KEY,
+});
 
-const gemini = new ChatGoogleGenerativeAI({
-    model: "gemini-2.5-flash-image",
-    apiKey: process.env.GOOGLE_API_KEY
-})
-
-const geminiCoding = new ChatGoogleGenerativeAI({
-    model: "gemini-3.1-flash-lite", // or "gemini-3-flash-preview"
+const geminiCodingMain = new ChatGoogleGenerativeAI({
+    model: "gemini-3.1-flash-lite", // check the exact name in AI Studio
     apiKey: process.env.GOOGLE_API_KEY,
+    temperature: 0.2,
+    maxRetries: 2,
+});
+
+// FIX: ChatOpenAI needs configuration.baseURL, not base_url
+const openrouter = new ChatOpenAI({
+    model: "mistralai/devstral-2:free", // check OpenRouter's current :free list
+    apiKey: process.env.OPENROUTER_API_KEY,
+    configuration: { baseURL: "https://openrouter.ai/api/v1" },
     temperature: 0.2,
 });
 
-const gemini_pdf = new ChatGoogleGenerativeAI({
-    model: "gemini-2.5-flash",
-    apiKey: process.env.GOOGLE_API_KEY
-})
+// Coding: Gemini first, OpenRouter if Gemini fails (503/429)
+const geminiCoding = geminiCodingMain.withFallbacks({ fallbacks: [openrouter] });
 
+const gemini_pdf = new ChatGoogleGenerativeAI({
+    model: "gemini-flash-latest", // gemini-2.5-flash may be retired
+    apiKey: process.env.GOOGLE_API_KEY,
+    maxRetries: 2,
+});
 
 const tavilysearch = new TavilySearch({
     maxResults: 5,
-    apiKey: process.env.TAVILY_API_KEY
+    apiKey: process.env.TAVILY_API_KEY,
 });
 
-const deepseek = new ChatDeepSeek({
-    model: "deepseek-reasoner",
-    apiKey: process.env.DEEPSEEK_API_KEY
-})
-
-
-const openrouter = new ChatOpenAI({
-    model: "mistralai/devstral-2:free",
-    apiKey: process.env.OPENROUTER_API_KEY,
-    base_url: "https://openrouter.ai/api/v1",
-}
-)
-
 export const getModel = async (agent) => {
+
+    console.log(`getModel("${agent}") `);
     switch (agent) {
         case "chat":
             return groq;
@@ -52,13 +47,10 @@ export const getModel = async (agent) => {
             return tavilysearch;
         case "coding":
             return geminiCoding;
-        case "image":
-            return gemini;
         case "pdf":
-            return gemini_pdf;
         case "ppt":
-            return gemini_pdf
+            return gemini_pdf;
         default:
-            return groq
+            return groq;
     }
 }

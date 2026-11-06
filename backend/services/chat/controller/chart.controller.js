@@ -32,9 +32,9 @@ export const getConversation = async (req, res) => {
 }
 export const updateConversation = async (req, res) => {
     try {
-        const {id,title} = req.body
+        const { id, title } = req.body
 
-        const conversation = await Conversation.findByIdAndUpdate(id,{
+        const conversation = await Conversation.findByIdAndUpdate(id, {
             title
         })
         return res.status(200).json(conversation)
@@ -48,12 +48,13 @@ export const updateConversation = async (req, res) => {
 export const saveMessage = async (req, res) => {
     try {
 
-        const { conversationId, role, content, artifact } = req.body
+        const { conversationId, role, content, artifact, image } = req.body
         const message = await Message.create({
             conversationId,
             role,
             content,
-            artifact: artifact || undefined
+            artifact: artifact || null,
+            image: image || null,
         })
 
         return res.status(200).json(message)
@@ -63,6 +64,20 @@ export const saveMessage = async (req, res) => {
 }
 
 export const getMessage = async (req, res) => {
+    try {
+
+        const { conversationId } = req.body
+        const message = await Message.find({
+            conversationId
+        }).sort({ createdAt: -1 })
+
+        return res.status(200).json(message)
+    } catch (err) {
+        return res.status(500).json({ message: `Getting message error${err}` })
+    }
+}
+
+export const getMessageForAgent = async (req, res) => {
     try {
 
         const { conversationId } = req.body

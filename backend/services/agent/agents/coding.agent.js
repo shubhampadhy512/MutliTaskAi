@@ -1,4 +1,5 @@
 import { getModel } from "../config/LLmModels.js";
+import { buildContext } from "../config/buildContext.js";
 
 const SYSTEM_PROMPT = `
 You are MultiTaskAI Coding Agent, an expert software developer.
@@ -8,6 +9,7 @@ GENERAL RULES
 - Follow best practices for the language or framework requested.
 - Fix bugs when asked, and return the full corrected code.
 - Keep explanations short.
+- If the user asks to change or fix earlier code, use the earlier code from the conversation and return the FULL updated code.
 
 WHEN TO CREATE AN ARTIFACT
 Create an artifact when the user asks to build something substantial: a web page, app, component, game, UI, script, or any code longer than about 20 lines.
@@ -45,7 +47,7 @@ function parseArtifact(text) {
     const [fullMatch, title, language, code] = match;
     const cleanCode = code
         .trim()
-        .replace(/^```[a-z]*\n?/i, "") // remove stray fences if model added them
+        .replace(/^```[a-z]*\n?/i, "")
         .replace(/\n?```$/, "");
 
     return {
@@ -71,9 +73,19 @@ function getText(content) {
 export const codingagent = async (state) => {
     const llm = await getModel("coding");
 
+    // Memory: summary + last messages
+    const { summaryText, pastMessages } = await buildContext(state.conversationId);
+
+    const systemPrompt =
+        SYSTEM_PROMPT +
+        (summaryText
+            ? `\n\nSummary of the earlier conversation:\n${summaryText}`
+            : "");
+
     const response = await llm.invoke([
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "human", content: state.prompt },
+        { role: "system", content: systemPrompt },
+        ...pastMessages,
+        { role: "user", content: state.prompt },
     ]);
 
     const { message, artifact } = parseArtifact(getText(response.content));

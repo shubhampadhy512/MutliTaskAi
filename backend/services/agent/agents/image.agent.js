@@ -1,45 +1,103 @@
+import { imageProviders } from "../config/imageProviders.js";
+import { uploadImage } from "../config/cloudinary.js";
 import { getModel } from "../config/LLmModels.js";
+import { buildContext } from "../config/buildContext.js";
+
+function getText(content) {
+    if (typeof content === "string") return content;
+    if (Array.isArray(content)) {
+        return content.map((p) => (typeof p === "string" ? p : p.text || "")).join("");
+    }
+    return String(content ?? "");
+}
+
+// If this is a short follow-up, join it with the previous image prompt
+async function buildImagePrompt(state) {
+    const prompt = state.prompt || "";
+
+    // Long prompts are already complete
+    if (prompt.length > 200) return prompt;
+
+    try {
+        const { pastMessages } = await buildContext(state.conversationId);
+
+        // Find the last image answer, then the user message before it
+        let lastImagePrompt = null;
+        for (let i = pastMessages.length - 1; i > 0; i--) {
+            const m = pastMessages[i];
+            if (m.role === "assistant" && m.content.includes("An image was generated")) {
+                const before = pastMessages[i - 1];
+                if (before?.role === "user") lastImagePrompt = before.content;
+                break;
+            }
+        }
+
+        // No earlier image: use the prompt as it is
+        if (!lastImagePrompt) return prompt;
+
+        const llm = await getModel("router"); // small model saves tokens
+        const response = await llm.invoke([
+            {
+                role: "system",
+                content:
+                    "You write prompts for an image generator. You get the previous image prompt and a new request from the user. " +
+                    "If the new request changes or adds to the previous image, return ONE new full image prompt that includes the change. " +
+                    "If the new request is a completely different image, return the new request as it is. " +
+                    "Return ONLY the prompt text, in English, no explanation.",
+            },
+            {
+                role: "human",
+                content: `Previous image prompt: ${lastImagePrompt.slice(0, 800)}\n\nNew request: ${prompt}`,
+            },
+        ]);
+
+        const finalPrompt = getText(response.content).trim();
+        return finalPrompt || prompt;
+    } catch (err) {
+        console.error("Image prompt build failed:", err.message);
+        return prompt;
+    }
+}
 
 export const imageagent = async (state) => {
-    const llm = await getModel("image");
-    const SystemPrompt = "You are MultiTaskAI Image Agent. Generate a high-quality, detailed image for the user's request.";
+    console.log("IMAGE AGENT CALLED with:", state.prompt.slice(0, 50));
 
-    const response = await llm.invoke([
-        {
-            role: "system",
-            content: SystemPrompt,
-        },
-        {
-            role: "human",
-            content: state.prompt,
-        },
-    ]);
+    const finalPrompt = await buildImagePrompt(state);
+    if (finalPrompt !== state.prompt) {
+        console.log("Image prompt rewritten:", finalPrompt.slice(0, 80));
+    }
 
-    // Content can be a string or an array of parts (text + image)
-    let text = "";
-    let imageUrl = null;
+    let image = null;
+    let lastError = null;
 
-    if (typeof response.content === "string") {
-        text = response.content;
-    } else if (Array.isArray(response.content)) {
-        for (const part of response.content) {
-            if (typeof part === "string") {
-                text += part;
-            } else if (part.type === "text") {
-                text += part.text || "";
-            } else if (part.type === "image_url") {
-                // LangChain format: string or { url }
-                imageUrl = typeof part.image_url === "string" ? part.image_url : part.image_url?.url;
-            } else if (part.inlineData?.data) {
-                // Raw Gemini format
-                imageUrl = `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
-            }
+    for (const provider of imageProviders) {
+        try {
+            image = await provider.run(finalPrompt);
+            console.log(`Image generated with ${provider.name}`);
+            break;
+        } catch (err) {
+            lastError = err;
+            console.error(`Image provider ${provider.name} failed:`, err.message);
         }
     }
 
-    return {
-        ...state,
-        aiResponse: text || (imageUrl ? "Here's your image." : "I couldn't generate an image. Try rephrasing."),
-        image: imageUrl, // data URL like "data:image/png;base64,..." or null
-    };
+    if (!image) {
+        return {
+            ...state,
+            aiResponse: "Image generation is unavailable right now. Please try again later.",
+            image: null,
+            error: String(lastError?.message || lastError),
+        };
+    }
+
+    // Upload to Cloudinary: save a short URL instead of big base64
+    try {
+        image = await uploadImage(image);
+        console.log("Uploaded to Cloudinary");
+    } catch (err) {
+        console.error("Cloudinary failed:", err.message);
+        // keep base64 so the user still sees the image
+    }
+
+    return { ...state, aiResponse: "Here's your image.", image };
 };

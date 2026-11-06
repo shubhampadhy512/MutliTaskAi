@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import '../style/ArtifactPanel.css'
 
 const HTML_LANGUAGES = new Set(['html', 'htm', 'xhtml'])
 

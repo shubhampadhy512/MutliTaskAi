@@ -1,4 +1,3 @@
-
 import { StateGraph, START, END } from "@langchain/langgraph";
 
 import { agentState } from "./state.agent.js";
@@ -17,7 +16,7 @@ workflow.addNode("router", router);
 workflow.addNode("chat", chatagent);
 workflow.addNode("search", searchagent);
 workflow.addNode("coding", codingagent);
-workflow.addNode("image", imageagent);
+workflow.addNode("imageGen", imageagent); // renamed: "image" clashes with the state field
 workflow.addNode("pdf", pdfagent);
 workflow.addNode("ppt", pptagent);
 
@@ -34,7 +33,7 @@ workflow.addConditionalEdges(
             case "coding":
                 return "coding";
             case "image":
-                return "image";
+                return "imageGen"; // state.agent stays "image", only the node is renamed
             case "pdf":
                 return "pdf";
             case "ppt":
@@ -47,7 +46,7 @@ workflow.addConditionalEdges(
         chat: "chat",
         search: "search",
         coding: "coding",
-        image: "image",
+        imageGen: "imageGen",
         pdf: "pdf",
         ppt: "ppt",
     }
@@ -58,7 +57,7 @@ workflow.addEdge("search", "chat");
 
 workflow.addEdge("chat", END);
 workflow.addEdge("coding", END);
-workflow.addEdge("image", END);
+workflow.addEdge("imageGen", END);
 workflow.addEdge("pdf", END);
 workflow.addEdge("ppt", END);
 

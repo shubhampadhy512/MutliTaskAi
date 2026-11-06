@@ -19,6 +19,7 @@ function Home() {
   const [historyError, setHistoryError] = useState('')
   const [messages, setMessages] = useState([])
   const [isSending, setIsSending] = useState(false)
+  const [isRateLimited, setIsRateLimited] = useState(false)
   const [chatError, setChatError] = useState('')
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
@@ -104,6 +105,7 @@ function Home() {
 
     try {
       const { data } = await api.get('/chat/get-conversation')
+      console.log(data)
       if (!Array.isArray(data)) {
         throw new Error('The chat service returned an invalid conversation list.')
       }
@@ -154,7 +156,7 @@ function Home() {
   }
 
   const handleSendMessage = async (prompt) => {
-    if (isSending) return
+    if (isSending || isRateLimited) return
 
     setMessage('')
     setChatError('')
@@ -205,13 +207,23 @@ function Home() {
 
       setMessages((currentMessages) => [
         ...currentMessages,
-        { role: 'assistant', content: response, artifact: data?.artifact || null },
+        {
+          role: 'assistant',
+          content: response,
+          artifact: data?.artifact || null,
+          image: data?.image || null,
+        },
       ])
     } catch (error) {
       console.error('Unable to send chat message:', error)
-      setChatError(
-        error.response?.data?.message || error.message || 'Unable to send your message. Please try again.',
-      )
+      if (error.response?.status === 429) {
+        setIsRateLimited(true)
+        setChatError('You’ve reached your limit. Try again sometime later.')
+      } else {
+        setChatError(
+          error.response?.data?.message || error.message || 'Unable to send your message. Please try again.',
+        )
+      }
     } finally {
       setIsSending(false)
     }
@@ -235,6 +247,7 @@ function Home() {
         conversationId: selectedConversationId,
       })
 
+      console.log(data)
       if (!Array.isArray(data)) {
         throw new Error('The chat service returned an invalid message list.')
       }
@@ -243,6 +256,7 @@ function Home() {
         role: chatMessage.role === 'ai' ? 'assistant' : chatMessage.role,
         content: chatMessage.content,
         artifact: chatMessage.artifact || null,
+        image: chatMessage.image || null,
       })))
     } catch (error) {
       console.error('Unable to load conversation messages:', error)
@@ -401,6 +415,7 @@ function Home() {
         setMessage={setMessage}
         messages={messages}
         isSending={isSending}
+        isRateLimited={isRateLimited}
         chatError={chatError}
         onSendMessage={handleSendMessage}
         onEditMessage={handleEditMessage}

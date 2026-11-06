@@ -1,23 +1,30 @@
 import mongoose from "mongoose";
 
-const messageSchema = await mongoose.Schema({
-    conversationId:{
-        type:mongoose.Schema.Types.ObjectId,
-        ref:'Conversation'
+const messageSchema = new mongoose.Schema(
+    {
+        conversationId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Conversation",
+        },
+        role: {
+            type: String,
+            enum: ["user", "ai"],
+        },
+        content: String,
+        artifact: {
+            title: String,
+            language: String,
+            code: String,
+            previewable: Boolean,
+        },
+        image: {
+            type: String, // image URL (recommended) or base64 data URL
+            default: null,
+        },
     },
-    role:{
-        type:String,
-        enum:['user','ai']
-    },
-    content:String,
-    artifact:{
-        title:String,
-        language:String,
-        code:String,
-        previewable:Boolean
-    }
-},{timestamps:true})
+    { timestamps: true }
+);
 
-const Message = mongoose.model("Message",messageSchema)
+const Message = mongoose.model("Message", messageSchema);
 
-export default Message
+export default Message;
