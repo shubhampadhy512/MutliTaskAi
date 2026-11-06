@@ -2,6 +2,7 @@ import { imageProviders } from "../config/imageProviders.js";
 import { uploadImage } from "../config/cloudinary.js";
 import { getModel } from "../config/LLmModels.js";
 import { buildContext } from "../config/buildContext.js";
+import { addLogo } from "../config/addLogo.js";
 
 function getText(content) {
     if (typeof content === "string") return content;
@@ -90,7 +91,14 @@ export const imageagent = async (state) => {
         };
     }
 
-    // Upload to Cloudinary: save a short URL instead of big base64
+    try {
+        image = await addLogo(image);
+        console.log("Logo added");
+    } catch (err) {
+        console.error("Add logo failed:", err.message);
+    }
+
+    // 2. Upload to Cloudinary: save a short URL instead of big base64
     try {
         image = await uploadImage(image);
         console.log("Uploaded to Cloudinary");
