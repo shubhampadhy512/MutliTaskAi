@@ -175,6 +175,33 @@
   outline: none;
 }
 
+.chat-history-loading {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  color: #aaa4c0;
+}
+
+.chat-history-loading-mark {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border: 1px solid rgba(217, 207, 255, 0.2);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(177, 157, 255, 0.18), rgba(99, 73, 197, 0.1));
+  box-shadow: 0 0 34px rgba(125, 94, 227, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.chat-history-loading>p {
+  margin: 0;
+  color: #e9e5f4;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .welcome-content {
   display: flex;
   flex-direction: column;
@@ -431,6 +458,35 @@
   width: min(100%, 1120px);
   align-self: center;
   padding: 0 36px 17px;
+}
+
+.editing-message-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 8px;
+  padding: 0 4px;
+  color: #bbaeff;
+  font-size: 10px;
+}
+
+.editing-message-banner button {
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #aaa7b5;
+  background: rgba(255, 255, 255, 0.035);
+  cursor: pointer;
+  font: inherit;
+}
+
+.editing-message-banner button:hover:not(:disabled) {
+  color: #e2dcf6;
+  border-color: rgba(187, 169, 255, 0.3);
+}
+
+.editing-message-banner button:disabled {
+  cursor: wait;
 }
 
 .message-composer {

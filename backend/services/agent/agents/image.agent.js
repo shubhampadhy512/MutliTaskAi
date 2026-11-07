@@ -33,7 +33,6 @@ async function buildImagePrompt(state) {
             }
         }
 
-        // No earlier image: use the prompt as it is
         if (!lastImagePrompt) return prompt;
 
         const llm = await getModel("router"); // small model saves tokens

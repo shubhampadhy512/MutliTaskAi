@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import '../style/ArtifactPanel.css'
+import { showErrorToast } from '../../utils/toast.js'
 
 const HTML_LANGUAGES = new Set(['html', 'htm', 'xhtml'])
 
@@ -61,6 +62,7 @@ function ArtifactPanel({
     } catch (error) {
       console.error('Unable to copy artifact code:', error)
       setCopyStatus('Copy failed')
+      showErrorToast('Unable to copy the artifact code to the clipboard.', 'Copy failed')
     }
   }
 

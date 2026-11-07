@@ -7,6 +7,7 @@ import ArtifactPanel from './ArtifactPanel.jsx'
 import { BrandMark, UserAvatar } from './WorkspacePrimitives.jsx'
 import { useDispatch } from 'react-redux'
 import { UserInfo } from '../feature/user.js'
+import { showDeleteConfirmation, showErrorToast } from '../../utils/toast.js'
 
 function Home() {
   const [user, setUser] = useState(null)
@@ -18,9 +19,11 @@ function Home() {
   const [isLoadingConversations, setIsLoadingConversations] = useState(false)
   const [historyError, setHistoryError] = useState('')
   const [messages, setMessages] = useState([])
+  const [editingMessage, setEditingMessage] = useState(null)
   const [isSending, setIsSending] = useState(false)
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false)
+  const [deletingConversationId, setDeletingConversationId] = useState('')
   const [isRateLimited, setIsRateLimited] = useState(false)
-  const [chatError, setChatError] = useState('')
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
   const [isArtifactPanelOpen, setIsArtifactPanelOpen] = useState(false)
@@ -28,7 +31,6 @@ function Home() {
   const [isResizingArtifacts, setIsResizingArtifacts] = useState(false)
   const [artifactTab, setArtifactTab] = useState('code')
   const [selectedArtifact, setSelectedArtifact] = useState(null)
-  const [errorMessage, setErrorMessage] = useState('')
   const dispatch = useDispatch();
   // const selector = useSelector((prev) => prev.user)
 
@@ -37,9 +39,9 @@ function Home() {
     setActiveConversation('')
     setConversationId('')
     setMessages([])
+    setEditingMessage(null)
     setSelectedArtifact(null)
     setIsArtifactPanelOpen(false)
-    setChatError('')
     setMessage('')
   }
 
@@ -112,9 +114,9 @@ function Home() {
       setConversations(data)
     } catch (error) {
       console.error('Unable to load chat history:', error)
-      setHistoryError(
-        error.response?.data?.message || error.message || 'Unable to load chat history.',
-      )
+      const message = error.response?.data?.message || error.message || 'Unable to load chat history.'
+      setHistoryError(message)
+      showErrorToast(message, 'Unable to load chat history')
     } finally {
       setIsLoadingConversations(false)
     }
@@ -139,7 +141,6 @@ function Home() {
   }, [dispatch, loadConversations])
   // console.log(user)
   const handleLogout = async () => {
-    setErrorMessage('')
     setIsLoggingOut(true)
     setIsAccountMenuOpen(false)
 
@@ -149,7 +150,7 @@ function Home() {
       startNewChat()
     } catch (error) {
       console.error('Error during logout:', error)
-      setErrorMessage('Unable to log out right now. Please try again.')
+      showErrorToast('Unable to log out right now. Please try again.', 'Unable to log out')
     } finally {
       setIsLoggingOut(false)
     }
@@ -158,12 +159,54 @@ function Home() {
   const handleSendMessage = async (prompt) => {
     if (isSending || isRateLimited) return
 
+    if (editingMessage) {
+      if (!conversationId || !editingMessage.messageId) {
+        showErrorToast('This message cannot be edited because its ID is unavailable.', 'Unable to edit message')
+        return
+      }
+
+      setIsSending(true)
+      try {
+        const { data } = await api.post('/chat/updatemessage', {
+          conversationId,
+          messageId: editingMessage.messageId,
+          prompt,
+        })
+        const response = typeof data === 'string' ? data : data?.aiResponse ?? data?.response
+
+        if (typeof response !== 'string' || !response.trim()) {
+          throw new Error('The agent service returned an empty response.')
+        }
+
+        setMessages((currentMessages) => [
+          ...currentMessages.slice(0, editingMessage.index),
+          { ...currentMessages[editingMessage.index], content: prompt },
+          {
+            role: 'assistant',
+            content: response,
+            artifact: data?.artifact || null,
+            image: data?.image || null,
+          },
+        ])
+        setActiveConversation((currentConversation) => currentConversation || prompt)
+        setEditingMessage(null)
+        setMessage('')
+      } catch (error) {
+        console.error('Unable to edit chat message:', error)
+        showErrorToast(
+          error.response?.data?.message || error.message || 'Unable to edit your message. Please try again.',
+          'Unable to edit message',
+        )
+      } finally {
+        setIsSending(false)
+      }
+      return
+    }
+
     setMessage('')
-    setChatError('')
     setMessages((currentMessages) => [...currentMessages, { role: 'user', content: prompt }])
     setActiveConversation((currentConversation) => currentConversation || prompt)
     setIsSending(true)
-
     try {
       let activeConversationId = conversationId
 
@@ -191,7 +234,9 @@ function Home() {
           })
         } catch (error) {
           console.error('Unable to save conversation title:', error)
-          setHistoryError('The conversation started, but its title could not be saved.')
+          const message = 'The conversation started, but its title could not be saved.'
+          setHistoryError(message)
+          showErrorToast(message, 'Unable to save conversation')
         }
       }
 
@@ -205,23 +250,28 @@ function Home() {
         throw new Error('The agent service returned an empty response.')
       }
 
-      setMessages((currentMessages) => [
-        ...currentMessages,
-        {
-          role: 'assistant',
-          content: response,
-          artifact: data?.artifact || null,
-          image: data?.image || null,
-        },
-      ])
+      setMessages((currentMessages) => {
+        const lastMessage = currentMessages[currentMessages.length - 1]
+        return [
+          ...currentMessages.slice(0, -1),
+          { ...lastMessage, messageId: data?.userMessageId || null },
+          {
+            role: 'assistant',
+            content: response,
+            artifact: data?.artifact || null,
+            image: data?.image || null,
+          },
+        ]
+      })
     } catch (error) {
       console.error('Unable to send chat message:', error)
       if (error.response?.status === 429) {
         setIsRateLimited(true)
-        setChatError('You’ve reached your limit. Try again sometime later.')
+        showErrorToast('You’ve reached your limit. Try again sometime later.', 'Message limit reached')
       } else {
-        setChatError(
+        showErrorToast(
           error.response?.data?.message || error.message || 'Unable to send your message. Please try again.',
+          'Unable to send message',
         )
       }
     } finally {
@@ -236,10 +286,11 @@ function Home() {
     setConversationId(selectedConversationId)
     setActiveConversation(conversation.title || 'New Chat')
     setMessages([])
+    setEditingMessage(null)
     setMessage('')
-    setChatError('')
     setSelectedArtifact(null)
     setIsArtifactPanelOpen(false)
+    setIsLoadingMessages(true)
     setIsSending(true)
 
     try {
@@ -253,6 +304,7 @@ function Home() {
       }
 
       setMessages(data.slice().reverse().map((chatMessage) => ({
+        messageId: chatMessage._id,
         role: chatMessage.role === 'ai' ? 'assistant' : chatMessage.role,
         content: chatMessage.content,
         artifact: chatMessage.artifact || null,
@@ -260,24 +312,57 @@ function Home() {
       })))
     } catch (error) {
       console.error('Unable to load conversation messages:', error)
-      setChatError(
+      showErrorToast(
         error.response?.data?.message || error.message || 'Unable to load this conversation.',
+        'Unable to load conversation',
       )
     } finally {
+      setIsLoadingMessages(false)
       setIsSending(false)
     }
   }
 
-  const handleEditMessage = (messageIndex, content) => {
-    const previousMessages = messages.slice(0, messageIndex)
-    const previousPrompt = [...previousMessages]
-      .reverse()
-      .find((chatMessage) => chatMessage.role === 'user')?.content || ''
-
-    setMessages(previousMessages)
-    setActiveConversation(previousPrompt)
+  const handleEditMessage = (messageIndex, messageId, content) => {
+    if (!messageId) {
+      showErrorToast('This message cannot be edited because its ID is unavailable.', 'Unable to edit message')
+      return
+    }
+    setEditingMessage({ index: messageIndex, messageId })
     setMessage(content)
-    setChatError('')
+  }
+
+  const handleCancelEdit = () => {
+    setEditingMessage(null)
+    setMessage('')
+  }
+
+  const deleteConversation = async (conversationIdToDelete) => {
+    setHistoryError('')
+    setDeletingConversationId(conversationIdToDelete)
+    try {
+      await api.get(`/chat/delete-conversation/${encodeURIComponent(conversationIdToDelete)}`)
+      setConversations((currentConversations) => currentConversations.filter(
+        (item) => item._id !== conversationIdToDelete,
+      ))
+      if (conversationId === conversationIdToDelete) startNewChat()
+    } catch (error) {
+      console.error('Unable to delete conversation:', error)
+      const message = error.response?.data?.message || error.message || 'Unable to delete this conversation.'
+      setHistoryError(message)
+      showErrorToast(message, 'Unable to delete conversation')
+    } finally {
+      setDeletingConversationId('')
+    }
+  }
+
+  const handleDeleteConversation = (conversation) => {
+    if (isSending || deletingConversationId) return
+    const conversationIdToDelete = conversation?._id
+    if (!conversationIdToDelete) return
+
+    showDeleteConfirmation(conversation.title || 'New Chat', () => {
+      void deleteConversation(conversationIdToDelete)
+    })
   }
 
   const displayName = user?.name?.trim() || user?.email?.split('@')[0] || 'My workspace'
@@ -342,27 +427,46 @@ function Home() {
               ↻
             </button>
           </div>
-          {historyError && <p className="history-error" role="alert">{historyError}</p>}
           {isLoadingConversations && conversations.length === 0 ? (
             <p className="history-status" role="status">Loading chats…</p>
           ) : (
             <nav className="conversation-list" aria-label="Chat history">
               {conversations.map((conversation) => (
-                <button
-                  className={`conversation-link${conversationId === conversation._id ? ' active' : ''}`}
+                <div
+                  className={`conversation-item${conversationId === conversation._id ? ' active' : ''}`}
                   key={conversation._id}
-                  type="button"
-                  onClick={() => handleSelectConversation(conversation)}
-                  disabled={isSending}
-                  title={conversation.title || 'New Chat'}
                 >
-                  <span aria-hidden="true">◷</span>
-                  <span>
-                    {conversation.title === 'New Chat' && conversation._id === conversationId
-                      ? activeConversation
-                      : conversation.title || 'New Chat'}
-                  </span>
-                </button>
+                  <button
+                    className="conversation-link"
+                    type="button"
+                    onClick={() => handleSelectConversation(conversation)}
+                    disabled={isSending || Boolean(deletingConversationId)}
+                    title={conversation.title || 'New Chat'}
+                  >
+                    <span aria-hidden="true">◷</span>
+                    <span>
+                      {conversation.title === 'New Chat' && conversation._id === conversationId
+                        ? activeConversation
+                        : conversation.title || 'New Chat'}
+                    </span>
+                  </button>
+                  <button
+                    className="conversation-delete"
+                    type="button"
+                    aria-label={`Delete ${conversation.title || 'New Chat'}`}
+                    title="Delete chat"
+                    onClick={() => handleDeleteConversation(conversation)}
+                    disabled={isSending || Boolean(deletingConversationId)}
+                  >
+                    {deletingConversationId === conversation._id ? (
+                      <span aria-hidden="true">…</span>
+                    ) : (
+                      <svg viewBox="0 0 20 20" aria-hidden="true">
+                        <path d="M4 6h12M8 6V4h4v2m-6 0 .7 10h6.6L14 6m-5 3v4m2-4v4" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               ))}
               {!isLoadingConversations && conversations.length === 0 && !historyError && (
                 <p className="history-status">Your chats will appear here.</p>
@@ -372,7 +476,6 @@ function Home() {
         </div>
 
         <div className="sidebar-bottom">
-          {errorMessage && <p className="logout-error" role="alert">{errorMessage}</p>}
           <div className="account-menu">
             <button
               className="account-row"
@@ -415,10 +518,12 @@ function Home() {
         setMessage={setMessage}
         messages={messages}
         isSending={isSending}
+        isLoadingMessages={isLoadingMessages}
         isRateLimited={isRateLimited}
-        chatError={chatError}
         onSendMessage={handleSendMessage}
         onEditMessage={handleEditMessage}
+        isEditingMessage={Boolean(editingMessage)}
+        onCancelEdit={handleCancelEdit}
         onOpenArtifact={showArtifact}
       />
       {isArtifactPanelOpen && selectedArtifact && (

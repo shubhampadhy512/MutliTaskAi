@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { BrandMark, UserAvatar } from './WorkspacePrimitives.jsx'
 import { extractCodeArtifacts } from './artifactUtils.js'
+import { showErrorToast } from '../../utils/toast.js'
 import '../style/Chat.css'
 
 const prompts = [
@@ -45,10 +46,12 @@ function Chat({
   setMessage,
   messages,
   isSending,
+  isLoadingMessages,
   isRateLimited,
-  chatError,
   onSendMessage,
   onEditMessage,
+  isEditingMessage,
+  onCancelEdit,
   onOpenArtifact,
 }) {
   const [copiedMessageIndex, setCopiedMessageIndex] = useState(null)
@@ -87,6 +90,11 @@ function Chat({
     onSendMessage(trimmedMessage)
   }
 
+  const latestUserMessageIndex = messages.reduce(
+    (latestIndex, chatMessage, index) => chatMessage.role === 'user' ? index : latestIndex,
+    -1,
+  )
+
   const handleCopy = async (content, index) => {
     window.clearTimeout(copyStatusTimeoutRef.current)
 
@@ -98,6 +106,7 @@ function Chat({
       console.error('Unable to copy message:', error)
       setCopyErrorIndex(index)
       setCopiedMessageIndex(null)
+      showErrorToast('Unable to copy this message to the clipboard.', 'Copy failed')
     }
 
     copyStatusTimeoutRef.current = window.setTimeout(() => {
@@ -122,7 +131,19 @@ function Chat({
       </header>
 
       <div className="chat-content" ref={chatContentRef}>
-        {messages.length > 0 ? (
+        {isLoadingMessages ? (
+          <div className="chat-history-loading" role="status" aria-live="polite">
+            <span className="chat-history-loading-mark">
+              <BrandMark className="brand-mark-grid loading-brand-mark" />
+            </span>
+            <p>Loading previous messages</p>
+            <span className="loading-typing-dots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+          </div>
+        ) : messages.length > 0 ? (
           <div className="conversation-view">
             {messages.map((chatMessage, index) => chatMessage.role === 'user' ? (
               <div className="user-message" key={`user-${index}`}>
@@ -147,18 +168,20 @@ function Chat({
                         </svg>
                       )}
                     </button>
-                    <button
-                      type="button"
-                      aria-label="Edit message"
-                      title="Edit"
-                      onClick={() => onEditMessage(index, chatMessage.content)}
-                      disabled={isSending}
-                    >
-                      <svg viewBox="0 0 20 20" aria-hidden="true">
-                        <path d="m13.8 4.2 2 2a1.4 1.4 0 0 1 0 2l-7.9 7.9-3.5.8.8-3.5 7.9-7.9a1.4 1.4 0 0 1 2 0Z" />
-                        <path d="m12.5 5.5 2 2" />
-                      </svg>
-                    </button>
+                    {index === latestUserMessageIndex && (
+                      <button
+                        type="button"
+                        aria-label="Edit message"
+                        title="Edit"
+                        onClick={() => onEditMessage(index, chatMessage.messageId, chatMessage.content)}
+                        disabled={isSending}
+                      >
+                        <svg viewBox="0 0 20 20" aria-hidden="true">
+                          <path d="m13.8 4.2 2 2a1.4 1.4 0 0 1 0 2l-7.9 7.9-3.5.8.8-3.5 7.9-7.9a1.4 1.4 0 0 1 2 0Z" />
+                          <path d="m12.5 5.5 2 2" />
+                        </svg>
+                      </button>
+                    )}
                     {copyErrorIndex === index && (
                       <span role="status">Copy failed</span>
                     )}
@@ -320,7 +343,14 @@ function Chat({
       </div>
 
       <div className="composer-area">
-        {chatError && <p className="chat-error" role="alert">{chatError}</p>}
+        {isEditingMessage && (
+          <div className="editing-message-banner">
+            <span>Editing message</span>
+            <button type="button" onClick={onCancelEdit} disabled={isSending}>
+              Cancel
+            </button>
+          </div>
+        )}
         <form className="message-composer" onSubmit={handleSubmit}>
           <textarea
             ref={composerRef}
@@ -351,8 +381,8 @@ function Chat({
                 className="send-button"
                 type="submit"
                 disabled={!message.trim() || isSending || isRateLimited}
-                aria-label="Send message"
-                title="Send message"
+                aria-label={isEditingMessage ? 'Save edited message' : 'Send message'}
+                title={isEditingMessage ? 'Save edited message' : 'Send message'}
               >
                 <span aria-hidden="true">↑</span>
               </button>

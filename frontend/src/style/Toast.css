@@ -3,6 +3,14 @@
   padding: 14px;
 }
 
+.delete-confirmation-backdrop {
+  position: fixed;
+  z-index: 9998;
+  inset: 0;
+  background: rgba(8, 7, 14, 0.48);
+  backdrop-filter: blur(1px);
+}
+
 .Toastify__toast--success {
   position: relative;
   min-height: 76px;
@@ -17,6 +25,157 @@
     0 16px 42px rgba(0, 0, 0, 0.38),
     0 0 24px rgba(129, 99, 222, 0.13),
     inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.Toastify__toast--error {
+  position: relative;
+  min-height: 76px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 139, 151, 0.25);
+  border-radius: 15px;
+  color: #fff1f2;
+  background:
+    radial-gradient(ellipse at 0% 50%, rgba(216, 75, 96, 0.16), transparent 58%),
+    linear-gradient(135deg, #2a1c24, #1b161d 75%);
+  box-shadow:
+    0 16px 42px rgba(0, 0, 0, 0.38),
+    0 0 24px rgba(202, 70, 91, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.Toastify__toast--error::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, #ffb1b8, #e05b6c);
+  content: '';
+}
+
+.Toastify__toast--error .Toastify__toast-body {
+  display: flex;
+  align-items: center;
+  padding: 0 3px;
+  animation: toast-content-arrive 300ms ease-out both;
+}
+
+.Toastify__toast--error .Toastify__close-button {
+  align-self: flex-start;
+  margin-top: 2px;
+  color: #c2a4aa;
+  opacity: 0.8;
+}
+
+.Toastify__toast--error .Toastify__close-button:hover {
+  color: #fff;
+  opacity: 1;
+}
+
+.Toastify__toast--error .Toastify__progress-bar {
+  height: 3px;
+  background: linear-gradient(90deg, #e05b6c, #ffb1b8);
+  box-shadow: 0 0 10px rgba(255, 119, 133, 0.55);
+}
+
+.error-toast {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 2px 6px;
+}
+
+.error-toast-icon {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(255, 160, 170, 0.4);
+  border-radius: 50%;
+  color: #ffabb4;
+  background: rgba(224, 91, 108, 0.12);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.error-toast-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.error-toast-copy strong {
+  color: #fff1f2;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.error-toast-copy>span {
+  overflow-wrap: anywhere;
+  color: #c3aeb3;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.delete-confirmation-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 2px 6px;
+}
+
+.delete-confirmation-copy {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.delete-confirmation-copy>strong {
+  color: #fff1f2;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.delete-confirmation-copy>span:not(.delete-confirmation-actions) {
+  overflow-wrap: anywhere;
+  color: #c3aeb3;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.delete-confirmation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 4px;
+}
+
+.delete-confirmation-actions button {
+  min-height: 27px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  color: #e8e1e4;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.delete-confirmation-actions .delete-confirmation-confirm {
+  border-color: rgba(255, 139, 151, 0.35);
+  color: #fff1f2;
+  background: rgba(224, 91, 108, 0.2);
+}
+
+.delete-confirmation-actions .delete-confirmation-cancel:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.delete-confirmation-actions .delete-confirmation-confirm:hover {
+  border-color: rgba(255, 160, 170, 0.55);
+  background: rgba(224, 91, 108, 0.32);
 }
 
 .Toastify__toast--success::before {
@@ -116,7 +275,8 @@
     padding: 8px;
   }
 
-  .Toastify__toast--success {
+  .Toastify__toast--success,
+  .Toastify__toast--error {
     min-height: 70px;
     border-radius: 13px;
   }
@@ -124,6 +284,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .Toastify__toast--success .Toastify__toast-body,
+  .Toastify__toast--error .Toastify__toast-body,
   .login-success-toast strong,
   .login-success-toast span {
     animation-duration: 0.01ms;

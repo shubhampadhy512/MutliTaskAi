@@ -342,8 +342,17 @@
   outline: none;
 }
 
+.conversation-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  border-radius: 7px;
+  transition: color 140ms ease, background 140ms ease;
+}
+
 .conversation-link {
   display: flex;
+  flex: 1 1 auto;
   min-width: 0;
   height: 35px;
   align-items: center;
@@ -379,6 +388,63 @@
 }
 
 .conversation-link.active>span:first-child {
+  color: #b1a1ff;
+}
+
+.conversation-item:hover,
+.conversation-item:focus-within {
+  color: #e2def3;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.conversation-delete {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-right: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: #858291;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+  transition: color 140ms ease, background 140ms ease, opacity 140ms ease;
+}
+
+.conversation-item:hover .conversation-delete,
+.conversation-item:focus-within .conversation-delete {
+  opacity: 1;
+}
+
+.conversation-delete:hover {
+  color: #ff9a9a;
+  background: rgba(255, 110, 110, 0.1);
+}
+
+.conversation-delete:disabled {
+  cursor: wait;
+}
+
+.conversation-delete svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
+}
+
+.conversation-item.active .conversation-link,
+.conversation-item.active .conversation-link:hover {
+  color: #dfd9f5;
+  background: rgba(166, 148, 255, 0.12);
+}
+
+.conversation-item.active .conversation-link>span:first-child {
   color: #b1a1ff;
 }
 
@@ -690,8 +756,16 @@
   }
   .conversation-link {
     width: auto;
-    max-width: 145px;
+    max-width: 122px;
+    min-width: 90px;
+    flex: 0 1 auto;
+  }
+  .conversation-item {
+    max-width: 165px;
     flex: 0 0 auto;
+  }
+  .conversation-delete {
+    opacity: 1;
   }
   .new-chat-button {
     height: 35px;

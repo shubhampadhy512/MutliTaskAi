@@ -5,10 +5,10 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { api } from '../../utils/axios'
 import { auth, googleProvider } from '../../utils/firebase'
+import { showErrorToast } from '../../utils/toast.js'
 
 function Login({ setUser }) {
   const navigate = useNavigate()
-  const [errorMessage, setErrorMessage] = useState('')
   const [isSigningIn, setIsSigningIn] = useState(false)
 
   const handleLogin = async (token) => {
@@ -24,12 +24,11 @@ function Login({ setUser }) {
       navigate('/home')
     } catch (error) {
       console.error('Error during login:', error)
-      setErrorMessage('Unable to sign in right now. Please try again.')
+      showErrorToast('Unable to sign in right now. Please try again.', 'Sign-in failed')
     }
   }
 
   const handleGoogleSignIn = async () => {
-    setErrorMessage('')
     setIsSigningIn(true)
 
     try {
@@ -38,7 +37,7 @@ function Login({ setUser }) {
       await handleLogin(token)
     } catch (error) {
       console.error('Error during Google sign-in:', error)
-      setErrorMessage('Google sign-in failed. Please try again.')
+      showErrorToast('Google sign-in failed. Please try again.', 'Google sign-in failed')
     } finally {
       setIsSigningIn(false)
     }
@@ -134,8 +133,6 @@ function Login({ setUser }) {
               <span>{isSigningIn ? 'Signing in…' : 'Continue with Google'}</span>
               <span className="button-arrow" aria-hidden="true">→</span>
             </button>
-
-            {errorMessage && <p className="login-error" role="alert">{errorMessage}</p>}
 
             <div className="sign-in-divider" aria-hidden="true">
               <span />

@@ -1,24 +1,41 @@
 import axios from "axios";
+import redis from "../../../shared/redis/redis.js";
 import { graph } from "../graph/graph.js";
 import { formatResponse } from "../config/responseFormatter.js";
 import { addToMemory } from "../config/memorize.js"; // keep YOUR path
 
-
 export const Agent = async (req, res) => {
     try {
-        const { prompt, conversationId } = req.body;
+        const { prompt, conversationId, messageId } = req.body;
+        const chatUrl = process.env.CHAT_Service_URL;
 
-        await axios.post(`${process.env.CHAT_Service_URL}/save-message`, {
-            conversationId,
-            role: "user",
-            content: prompt,
-        });
+        // messageId exists = the user edited an old message
+        const isEdit = !!messageId;
 
-        // The agents read memory here. Do NOT add the prompt to memory before this.
+        let userMessageId = messageId || null;
+
+        if (isEdit) {
+            // Clear old memory. getMemory rebuilds it from MongoDB.
+            try {
+                await redis.del(`message:${conversationId}`);
+            } catch (e) {
+                console.error("Redis clear failed:", e.message);
+            }
+        } else {
+            // New message: save the user message
+            const savedUser = await axios.post(`${chatUrl}/save-message`, {
+                conversationId,
+                role: "user",
+                content: prompt,
+            });
+            userMessageId = savedUser.data?._id ?? null;
+        }
+
         const result = await graph.invoke({ prompt, conversationId });
 
         const skipFormatter =
             result.agent === "image" ||
+            result.agent === "pdf" ||
             !!result.image ||
             !result.aiResponse ||
             result.aiResponse.length < 40;
@@ -33,7 +50,8 @@ export const Agent = async (req, res) => {
             }
         }
 
-        await axios.post(`${process.env.CHAT_Service_URL}/save-message`, {
+        // ALWAYS save the AI message (new chat and edit)
+        const savedAi = await axios.post(`${chatUrl}/save-message`, {
             conversationId,
             role: "ai",
             content: response,
@@ -41,18 +59,15 @@ export const Agent = async (req, res) => {
             image: result.image ?? null,
         });
 
-        // Save to memory AFTER the answer. A failure here must not break the answer.
+        // Save to memory AFTER the answer
         try {
             let memoryText = response;
 
-            // Keep the code, so the coding agent can fix it later
             if (result.artifact?.code) {
                 memoryText +=
                     `\n\n[Code artifact "${result.artifact.title}" (${result.artifact.language})]\n` +
                     result.artifact.code.slice(0, 6000);
             }
-
-            // Do not keep the image in memory
             if (result.image) memoryText = "(An image was generated for the user.)";
 
             await addToMemory(conversationId, "user", prompt);
@@ -62,6 +77,8 @@ export const Agent = async (req, res) => {
         }
 
         return res.status(200).json({
+            userMessageId,
+            aiMessageId: savedAi.data?._id ?? null,
             aiResponse: response,
             artifact: result.artifact ?? null,
             image: result.image ?? null,
