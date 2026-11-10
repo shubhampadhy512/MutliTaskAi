@@ -21,6 +21,18 @@ const messageSchema = new mongoose.Schema(
             type: String, // image URL (recommended) or base64 data URL
             default: null,
         },
+        // NEW: files the user attached. Each one is { name, type, url }
+        attachments: {
+            type: [
+                {
+                    name: String,
+                    type: { type: String }, // "image", "pdf" or "ppt"
+                    url: String,
+                    _id: false,
+                },
+            ],
+            default: [],
+        },
     },
     { timestamps: true }
 );

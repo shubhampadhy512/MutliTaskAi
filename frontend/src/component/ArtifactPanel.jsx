@@ -39,9 +39,15 @@ function createSafeHtmlDocument(code) {
 }
 
 function canRenderHtml(artifact) {
+  const code = artifact.code || ''
   return HTML_LANGUAGES.has(artifact.language)
     || artifact.language === 'svg'
-    || /<!doctype\s+html|<html[\s>]|<body[\s>]|<svg[\s>]/i.test(artifact.code)
+    || /<!doctype\s+html|<html[\s>]|<body[\s>]|<svg[\s>]/i.test(code)
+}
+
+// Cloudinary link that forces a download (other links are unchanged)
+function toDownloadUrl(url = '') {
+  return url.includes('/upload/') ? url.replace('/upload/', '/upload/fl_attachment/') : url
 }
 
 function ArtifactPanel({
@@ -53,7 +59,8 @@ function ArtifactPanel({
   onResizeBy,
 }) {
   const [copyStatus, setCopyStatus] = useState('')
-  const canPreview = canRenderHtml(artifact)
+  const isFile = Boolean(artifact.fileUrl) // PDF / PPT / image
+  const canPreview = !isFile && canRenderHtml(artifact)
 
   const handleCopyCode = async () => {
     try {
@@ -66,25 +73,77 @@ function ArtifactPanel({
     }
   }
 
+  const resizeHandle = (
+    <div
+      className="artifact-resize-handle"
+      role="separator"
+      aria-label="Resize artifact panel"
+      aria-orientation="vertical"
+      tabIndex={0}
+      onPointerDown={(event) => {
+        event.preventDefault()
+        onResizeStart()
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          event.preventDefault()
+          onResizeBy(event.key === 'ArrowLeft' ? 32 : -32)
+        }
+      }}
+    />
+  )
+
+  // ---------- File view (PDF / PPT / image) ----------
+  if (isFile) {
+    const viewerUrl = artifact.fileType === 'ppt'
+      ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(artifact.fileUrl)}`
+      : artifact.fileUrl
+
+    return (
+      <aside id="artifact-panel" className="artifact-panel" aria-label="Artifacts">
+        {resizeHandle}
+        <header className="artifact-header">
+          <div>
+            <p className="artifact-eyebrow">WORKSPACE</p>
+            <h2>Artifacts</h2>
+          </div>
+          <button className="artifact-close" type="button" aria-label="Close artifact panel" onClick={onClose}>
+            ×
+          </button>
+        </header>
+
+        <div className="artifact-content">
+          <div className="artifact-file-view">
+            <div className="artifact-file">
+              <span className="artifact-file-dot" />
+              <span>{artifact.name}</span>
+              <a
+                className="artifact-copy-button artifact-download-link"
+                href={toDownloadUrl(artifact.fileUrl)}
+                download={artifact.name}
+              >
+                ↓ Download
+              </a>
+            </div>
+            {artifact.fileType === 'image' ? (
+              <img className="artifact-file-image" src={artifact.fileUrl} alt={artifact.name} />
+            ) : (
+              <iframe
+                className="artifact-file-frame"
+                title={artifact.name}
+                src={viewerUrl}
+              />
+            )}
+          </div>
+        </div>
+      </aside>
+    )
+  }
+
+  // ---------- Code view (your original code, not changed) ----------
   return (
     <aside id="artifact-panel" className="artifact-panel" aria-label="Artifacts">
-      <div
-        className="artifact-resize-handle"
-        role="separator"
-        aria-label="Resize artifact panel"
-        aria-orientation="vertical"
-        tabIndex={0}
-        onPointerDown={(event) => {
-          event.preventDefault()
-          onResizeStart()
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-            event.preventDefault()
-            onResizeBy(event.key === 'ArrowLeft' ? 32 : -32)
-          }
-        }}
-      />
+      {resizeHandle}
       <header className="artifact-header">
         <div>
           <p className="artifact-eyebrow">WORKSPACE</p>
@@ -154,7 +213,7 @@ function ArtifactPanel({
         ) : canPreview ? (
           <div className="artifact-preview">
             <p className="artifact-safety-note">
-                      Isolated preview · approved CDN scripts can run; network requests and browser storage are blocked
+              Isolated preview · approved CDN scripts can run; network requests and browser storage are blocked
             </p>
             <iframe
               title="Isolated HTML artifact preview"

@@ -37,12 +37,12 @@ const prompts = [
   },
 ]
 
-// NEW: attachment limits
+// Attachment limits
 const MAX_FILES = 3
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
 const ALLOWED_EXTENSIONS = ['pdf', 'ppt', 'pptx']
 
-// NEW: finds links to .pdf / .ppt / .pptx files inside the AI message
+// Finds links to .pdf / .ppt / .pptx files inside the AI message
 const FILE_LINK = /\[([^\]]*)\]\((https?:\/\/[^\s)]+?\.(pdf|pptx?))(\?[^\s)]*)?\)/gi
 
 function extractFileLinks(content = '') {
@@ -58,9 +58,14 @@ function extractFileLinks(content = '') {
   return files
 }
 
-// NEW: remove those links from the text, so they are not shown twice
+// Remove those links from the text, so they are not shown twice
 function stripFileLinks(content = '') {
   return content.replace(FILE_LINK, '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+// Cloudinary link that forces a download
+function toDownloadUrl(url = '') {
+  return url.includes('/upload/') ? url.replace('/upload/', '/upload/fl_attachment/') : url
 }
 
 function Chat({
@@ -86,14 +91,28 @@ function Chat({
   const composerRef = useRef(null)
   const copyStatusTimeoutRef = useRef(null)
 
-  // NEW: attachment state
+  // Attachment state
   const [attachedFiles, setAttachedFiles] = useState([])
   const [isDragging, setIsDragging] = useState(false)
+  // Files that the user just sent (key = number of the user message)
+  const [sentAttachments, setSentAttachments] = useState({})
+  // Share toast
+  const [shareToast, setShareToast] = useState('')
+  const shareToastTimeoutRef = useRef(null)
   const fileInputRef = useRef(null)
 
   useEffect(() => () => {
     window.clearTimeout(copyStatusTimeoutRef.current)
   }, [])
+
+  useEffect(() => () => {
+    window.clearTimeout(shareToastTimeoutRef.current)
+  }, [])
+
+  // Forget the local files when the chat is empty or history is loading
+  useEffect(() => {
+    if (isLoadingMessages || messages.length === 0) setSentAttachments({})
+  }, [isLoadingMessages, messages.length])
 
   useEffect(() => {
     const chatContent = chatContentRef.current
@@ -113,7 +132,7 @@ function Chat({
     composer.style.height = `${Math.min(composer.scrollHeight, 150)}px`
   }, [message])
 
-  // NEW: add files from the picker, drag and drop, or paste
+  // Add files from the picker, drag and drop, or paste
   const addFiles = (fileList) => {
     const next = [...attachedFiles]
 
@@ -144,7 +163,7 @@ function Chat({
     setAttachedFiles(next)
   }
 
-  // NEW: remove one attached file
+  // Remove one attached file
   const removeFile = (id) => {
     setAttachedFiles((current) => {
       const removed = current.find((item) => item.id === id)
@@ -153,7 +172,7 @@ function Chat({
     })
   }
 
-  // NEW: drag and drop
+  // Drag and drop
   const handleDragOver = (event) => {
     if (!event.dataTransfer?.types?.includes('Files')) return
     event.preventDefault()
@@ -171,7 +190,7 @@ function Chat({
     addFiles(event.dataTransfer.files)
   }
 
-  // NEW: paste (Ctrl+V). Normal text paste is not touched.
+  // Paste (Ctrl+V). Normal text paste is not touched.
   const handlePaste = (event) => {
     const files = event.clipboardData?.files
     if (files && files.length > 0) {
@@ -180,21 +199,54 @@ function Chat({
     }
   }
 
-  // CHANGED: a file alone is now enough to send, and files are passed as 2nd argument
+  // A file alone is enough to send. Files are passed as 2nd argument,
+  // and also remembered here so they show in the user message.
   const handleSubmit = (event) => {
     event.preventDefault()
     const trimmedMessage = message.trim()
     const hasFiles = attachedFiles.length > 0
     if ((!trimmedMessage && !hasFiles) || isSending || isRateLimited) return
 
+    if (hasFiles) {
+      const userCount = messages.filter((item) => item.role === 'user').length
+      const attachments = attachedFiles.map((item) => {
+        const name = item.file.name
+        const isImage = item.file.type.startsWith('image/')
+        const type = isImage ? 'image' : name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'ppt'
+        return {
+          name,
+          type,
+          url: item.preview || URL.createObjectURL(item.file),
+        }
+      })
+      setSentAttachments((current) => ({ ...current, [userCount]: attachments }))
+    }
+
     onSendMessage(
       trimmedMessage || 'Please look at the attached file.',
       attachedFiles.map((item) => item.file),
     )
 
-    attachedFiles.forEach((item) => item.preview && URL.revokeObjectURL(item.preview))
+    // The links are not revoked here, because the message shows them.
     setAttachedFiles([])
   }
+
+  // Open a PDF / PPT / image in the right-side panel
+  const openFile = (file) => {
+    onOpenArtifact({
+      id: `file-${file.url}`,
+      name: file.name,
+      fileType: file.type, // 'pdf' | 'ppt' | 'image'
+      fileUrl: file.url,
+    })
+  }
+
+  // Number of each user message (0, 1, 2 ...) to find its local files
+  const userNumberByIndex = {}
+  let userCounter = 0
+  messages.forEach((item, i) => {
+    if (item.role === 'user') userNumberByIndex[i] = userCounter++
+  })
 
   const latestUserMessageIndex = messages.reduce(
     (latestIndex, chatMessage, index) => chatMessage.role === 'user' ? index : latestIndex,
@@ -222,6 +274,38 @@ function Chat({
     }, 1500)
   }
 
+  // Copy the page URL and show a toast with a tick
+  const handleShare = async () => {
+    const url = window.location.href
+    let copied = false
+
+    try {
+      await navigator.clipboard.writeText(url)
+      copied = true
+    } catch (error) {
+      // Fallback for old browsers or http pages
+      try {
+        const temp = document.createElement('textarea')
+        temp.value = url
+        temp.style.position = 'fixed'
+        temp.style.opacity = '0'
+        document.body.appendChild(temp)
+        temp.select()
+        copied = document.execCommand('copy')
+        document.body.removeChild(temp)
+      } catch (fallbackError) {
+        copied = false
+      }
+    }
+
+    if (copied) {
+      setShareToast('Link copied to clipboard')
+      window.clearTimeout(shareToastTimeoutRef.current)
+      shareToastTimeoutRef.current = window.setTimeout(() => setShareToast(''), 2000)
+    } else {
+      showErrorToast('Unable to copy the link.', 'Share failed')
+    }
+  }
   return (
     <section
       className="chat-panel"
@@ -229,10 +313,16 @@ function Chat({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* NEW: shown while dragging a file over the page */}
+      {/* Shown while dragging a file over the page */}
       {isDragging && (
         <div className="drop-overlay" aria-hidden="true">
           Drop images, PDF or PPT here
+        </div>
+      )}
+      {shareToast && (
+        <div className="share-toast" role="status" aria-live="polite">
+          <span className="share-toast-tick" aria-hidden="true">✓</span>
+          <span>{shareToast}</span>
         </div>
       )}
 
@@ -242,7 +332,8 @@ function Chat({
           <span>AI Assistant</span>
           <span className="model-badge"><span /> Smart</span>
         </div>
-        <button className="share-button" type="button" aria-label="Share conversation">
+        <button className="share-button" type="button" aria-label="Share conversation"
+          onClick={handleShare}>
           <span aria-hidden="true">↗</span>
           <span>Share</span>
         </button>
@@ -268,6 +359,53 @@ function Chat({
                 <UserAvatar className="message-avatar" user={user} initials={initials} />
                 <div className="user-message-content">
                   <p>{chatMessage.content}</p>
+
+                  {/* Files attached by the user */}
+                  {(chatMessage.attachments?.length > 0 || sentAttachments[userNumberByIndex[index]]?.length > 0) && (
+                    <div className="message-files user-attachments">
+                      {(chatMessage.attachments?.length > 0
+                        ? chatMessage.attachments
+                        : sentAttachments[userNumberByIndex[index]]
+                      ).map((file, fileIndex) => (
+                        file.type === 'ppt' ? (
+                          <a
+                            className="message-file-card ppt"
+                            key={`${file.name}-${fileIndex}`}
+                            href={file.url}
+                            download={file.name}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <span className="message-file-icon" aria-hidden="true">PPT</span>
+                            <span className="message-file-info">
+                              <strong>{file.name}</strong>
+                              <small>PowerPoint · Click to download</small>
+                            </span>
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            className={`message-file-card ${file.type}`}
+                            key={`${file.name}-${fileIndex}`}
+                            onClick={() => openFile(file)}
+                          >
+                            {file.type === 'image' ? (
+                              <img className="user-attachment-thumb" src={file.url} alt={file.name} />
+                            ) : (
+                              <span className="message-file-icon" aria-hidden="true">PDF</span>
+                            )}
+                            <span className="message-file-info">
+                              <strong>{file.name}</strong>
+                              <small>
+                                {file.type === 'image' ? 'Image · Click to preview' : 'PDF document · Click to preview'}
+                              </small>
+                            </span>
+                          </button>
+                        )
+                      ))}
+                    </div>
+                  )}
+
                   <div className="message-actions">
                     <button
                       type="button"
@@ -328,7 +466,7 @@ function Chat({
                           },
                         }}
                       >
-                        {/* CHANGED: text without the PDF/PPT link (the file card shows it) */}
+                        {/* Text without the PDF/PPT link (the file card shows it) */}
                         {stripFileLinks(chatMessage.content)}
                       </ReactMarkdown>
                     </div>
@@ -342,11 +480,7 @@ function Chat({
                         />
                         <a
                           className="message-image-download"
-                          href={
-                            chatMessage.image.includes('/upload/')
-                              ? chatMessage.image.replace('/upload/', '/upload/fl_attachment/')
-                              : chatMessage.image
-                          }
+                          href={toDownloadUrl(chatMessage.image)}
                           download={`multitask-ai-${index}.png`}
                         >
                           ↓ Download
@@ -354,33 +488,39 @@ function Chat({
                       </figure>
                     )}
 
-                    {/* NEW: PDF / PPT file card */}
+                    {/* PDF / PPT file card: click opens the right-side panel */}
                     {extractFileLinks(chatMessage.content).length > 0 && (
                       <div className="message-files" aria-label="Generated documents">
                         {extractFileLinks(chatMessage.content).map((file) => (
-                          <a
+                          <div
                             className={`message-file-card ${file.type}`}
                             key={file.url}
-                            href={
-                              file.url.includes('/upload/')
-                                ? file.url.replace('/upload/', '/upload/fl_attachment/')
-                                : file.url
-                            }
-                            download={file.name}
-                            target="_blank"
-                            rel="noreferrer"
                           >
-                            <span className="message-file-icon" aria-hidden="true">
-                              {file.type === 'pdf' ? 'PDF' : 'PPT'}
-                            </span>
-                            <span className="message-file-info">
-                              <strong>{file.name}</strong>
-                              <small>
-                                {file.type === 'pdf' ? 'PDF document' : 'PowerPoint presentation'}
-                              </small>
-                            </span>
-                            <span className="message-file-download" aria-hidden="true">↓</span>
-                          </a>
+                            <button
+                              type="button"
+                              className="message-file-open"
+                              onClick={() => openFile(file)}
+                            >
+                              <span className="message-file-icon" aria-hidden="true">
+                                {file.type === 'pdf' ? 'PDF' : 'PPT'}
+                              </span>
+                              <span className="message-file-info">
+                                <strong>{file.name}</strong>
+                                <small>
+                                  {file.type === 'pdf' ? 'PDF document · Click to preview' : 'PowerPoint · Click to preview'}
+                                </small>
+                              </span>
+                            </button>
+                            <a
+                              className="message-file-download"
+                              href={toDownloadUrl(file.url)}
+                              download={file.name}
+                              aria-label={`Download ${file.name}`}
+                              title="Download"
+                            >
+                              ↓
+                            </a>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -502,7 +642,7 @@ function Chat({
           </div>
         )}
         <form className="message-composer" onSubmit={handleSubmit}>
-          {/* NEW: hidden file picker (opened by the + button) */}
+          {/* Hidden file picker (opened by the + button) */}
           <input
             ref={fileInputRef}
             type="file"
@@ -515,7 +655,7 @@ function Chat({
             }}
           />
 
-          {/* NEW: chips for the attached files */}
+          {/* Chips for the attached files */}
           {attachedFiles.length > 0 && (
             <div className="attached-files">
               {attachedFiles.map((item) => (
@@ -557,7 +697,6 @@ function Chat({
           />
           <div className="composer-toolbar">
             <div className="composer-tools">
-              {/* CHANGED: the + button now opens the file picker */}
               <button
                 type="button"
                 aria-label="Add attachment"

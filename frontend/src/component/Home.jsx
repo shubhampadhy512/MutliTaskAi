@@ -156,7 +156,8 @@ function Home() {
     }
   }
 
-  const handleSendMessage = async (prompt) => {
+  // CHANGE 1: accept files as the second value
+  const handleSendMessage = async (prompt, files = []) => {
     if (isSending || isRateLimited) return
 
     if (editingMessage) {
@@ -240,10 +241,15 @@ function Home() {
         }
       }
 
-      const { data } = await api.post('/agent/chat', {
-        conversationId: activeConversationId,
-        prompt,
-      })
+      // CHANGE 2: send FormData when there are files, old JSON when there are none
+      let requestBody = { conversationId: activeConversationId, prompt }
+      if (files.length > 0) {
+        requestBody = new FormData()
+        requestBody.append('conversationId', activeConversationId)
+        requestBody.append('prompt', prompt)
+        files.forEach((file) => requestBody.append('files', file))
+      }
+      const { data } = await api.post('/agent/chat', requestBody)
       const response = typeof data === 'string' ? data : data?.aiResponse ?? data?.response
 
       if (typeof response !== 'string' || !response.trim()) {
@@ -254,7 +260,12 @@ function Home() {
         const lastMessage = currentMessages[currentMessages.length - 1]
         return [
           ...currentMessages.slice(0, -1),
-          { ...lastMessage, messageId: data?.userMessageId || null },
+          {
+            ...lastMessage,
+            messageId: data?.userMessageId || null,
+            // CHANGE 3: keep the saved file links
+            attachments: data?.attachments || [],
+          },
           {
             role: 'assistant',
             content: response,
@@ -309,6 +320,8 @@ function Home() {
         content: chatMessage.content,
         artifact: chatMessage.artifact || null,
         image: chatMessage.image || null,
+        // CHANGE 4: load the files after refresh
+        attachments: chatMessage.attachments || [],
       })))
     } catch (error) {
       console.error('Unable to load conversation messages:', error)

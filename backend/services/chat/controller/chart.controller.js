@@ -77,13 +77,14 @@ export const updateConversation = async (req, res) => {
 export const saveMessage = async (req, res) => {
     try {
 
-        const { conversationId, role, content, artifact, image } = req.body
+        const { conversationId, role, content, artifact, image, attachments } = req.body
         const message = await Message.create({
             conversationId,
             role,
             content,
             artifact: artifact || null,
             image: image || null,
+            attachments: Array.isArray(attachments) ? attachments : [], // NEW
         })
 
         return res.status(200).json(message)

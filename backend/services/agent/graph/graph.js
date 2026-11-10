@@ -19,6 +19,7 @@ workflow.addNode("coding", codingagent);
 workflow.addNode("imageGen", imageagent); // renamed: "image" clashes with the state field
 workflow.addNode("pdf", pdfagent);
 workflow.addNode("ppt", pptagent);
+workflow.addNode("limit", async (state) => ({ ...state })); // credits finished
 
 workflow.addEdge(START, "router");
 
@@ -38,6 +39,8 @@ workflow.addConditionalEdges(
                 return "pdf";
             case "ppt":
                 return "ppt";
+            case "limit":
+                return "limit";
             default:
                 return "chat";
         }
@@ -49,6 +52,7 @@ workflow.addConditionalEdges(
         imageGen: "imageGen",
         pdf: "pdf",
         ppt: "ppt",
+        limit: "limit", // <-- ADDED (this fixes the error)
     }
 );
 
@@ -60,5 +64,6 @@ workflow.addEdge("coding", END);
 workflow.addEdge("imageGen", END);
 workflow.addEdge("pdf", END);
 workflow.addEdge("ppt", END);
+workflow.addEdge("limit", END);
 
 export const graph = workflow.compile();

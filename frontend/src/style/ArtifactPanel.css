@@ -311,6 +311,33 @@
   background: #fff;
 }
 
+.artifact-file-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.artifact-file-frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.artifact-file-image {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  object-fit: contain;
+}
+
+.artifact-download-link {
+  margin-left: auto;
+  text-decoration: none;
+}
+
 @media (max-width: 760px) {
 
   .artifact-panel {

@@ -20,7 +20,7 @@ app.use(express.json());
 
 app.use("/auth", proxy(process.env.AUTH_Service_URL));
 app.use("/chat", checkUserSession, proxyWithHeader(process.env.CHAT_Service_URL));
-app.use("/agent", checkUserSession, proxy(process.env.AGENT_Service_URL));
+app.use("/agent", checkUserSession, proxy(process.env.AGENT_Service_URL, { limit: "35mb" }));
 app.get("/getuser", checkUserSession, GetUser)
 
 app.get("/", (req, res) => {
