@@ -37,6 +37,32 @@ const prompts = [
   },
 ]
 
+// NEW: attachment limits
+const MAX_FILES = 3
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
+const ALLOWED_EXTENSIONS = ['pdf', 'ppt', 'pptx']
+
+// NEW: finds links to .pdf / .ppt / .pptx files inside the AI message
+const FILE_LINK = /\[([^\]]*)\]\((https?:\/\/[^\s)]+?\.(pdf|pptx?))(\?[^\s)]*)?\)/gi
+
+function extractFileLinks(content = '') {
+  const files = []
+  for (const match of content.matchAll(FILE_LINK)) {
+    const url = match[2] + (match[4] || '')
+    const type = match[3].toLowerCase() === 'pdf' ? 'pdf' : 'ppt'
+    const lastPart = decodeURIComponent(match[2].split('/').pop())
+    // remove the timestamp that the backend adds: name-1731234567890.pdf
+    const name = lastPart.replace(/-\d{10,}(?=\.\w+$)/, '')
+    files.push({ url, type, name })
+  }
+  return files
+}
+
+// NEW: remove those links from the text, so they are not shown twice
+function stripFileLinks(content = '') {
+  return content.replace(FILE_LINK, '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
 function Chat({
   user,
   initials,
@@ -60,6 +86,11 @@ function Chat({
   const composerRef = useRef(null)
   const copyStatusTimeoutRef = useRef(null)
 
+  // NEW: attachment state
+  const [attachedFiles, setAttachedFiles] = useState([])
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef(null)
+
   useEffect(() => () => {
     window.clearTimeout(copyStatusTimeoutRef.current)
   }, [])
@@ -82,12 +113,87 @@ function Chat({
     composer.style.height = `${Math.min(composer.scrollHeight, 150)}px`
   }, [message])
 
+  // NEW: add files from the picker, drag and drop, or paste
+  const addFiles = (fileList) => {
+    const next = [...attachedFiles]
+
+    for (const file of Array.from(fileList || [])) {
+      const ext = file.name.split('.').pop().toLowerCase()
+      const isImage = file.type.startsWith('image/')
+
+      if (!isImage && !ALLOWED_EXTENSIONS.includes(ext)) {
+        showErrorToast(`${file.name}: only images, PDF and PPT are allowed.`, 'File not supported')
+        continue
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        showErrorToast(`${file.name} is bigger than 10 MB.`, 'File too large')
+        continue
+      }
+      if (next.length >= MAX_FILES) {
+        showErrorToast(`You can attach up to ${MAX_FILES} files.`, 'Too many files')
+        break
+      }
+
+      next.push({
+        id: `${Date.now()}-${Math.random()}`,
+        file,
+        preview: isImage ? URL.createObjectURL(file) : null,
+      })
+    }
+
+    setAttachedFiles(next)
+  }
+
+  // NEW: remove one attached file
+  const removeFile = (id) => {
+    setAttachedFiles((current) => {
+      const removed = current.find((item) => item.id === id)
+      if (removed?.preview) URL.revokeObjectURL(removed.preview)
+      return current.filter((item) => item.id !== id)
+    })
+  }
+
+  // NEW: drag and drop
+  const handleDragOver = (event) => {
+    if (!event.dataTransfer?.types?.includes('Files')) return
+    event.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (event) => {
+    if (event.currentTarget.contains(event.relatedTarget)) return
+    setIsDragging(false)
+  }
+
+  const handleDrop = (event) => {
+    event.preventDefault()
+    setIsDragging(false)
+    addFiles(event.dataTransfer.files)
+  }
+
+  // NEW: paste (Ctrl+V). Normal text paste is not touched.
+  const handlePaste = (event) => {
+    const files = event.clipboardData?.files
+    if (files && files.length > 0) {
+      event.preventDefault()
+      addFiles(files)
+    }
+  }
+
+  // CHANGED: a file alone is now enough to send, and files are passed as 2nd argument
   const handleSubmit = (event) => {
     event.preventDefault()
     const trimmedMessage = message.trim()
-    if (!trimmedMessage || isSending || isRateLimited) return
+    const hasFiles = attachedFiles.length > 0
+    if ((!trimmedMessage && !hasFiles) || isSending || isRateLimited) return
 
-    onSendMessage(trimmedMessage)
+    onSendMessage(
+      trimmedMessage || 'Please look at the attached file.',
+      attachedFiles.map((item) => item.file),
+    )
+
+    attachedFiles.forEach((item) => item.preview && URL.revokeObjectURL(item.preview))
+    setAttachedFiles([])
   }
 
   const latestUserMessageIndex = messages.reduce(
@@ -117,7 +223,19 @@ function Chat({
   }
 
   return (
-    <section className="chat-panel">
+    <section
+      className="chat-panel"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* NEW: shown while dragging a file over the page */}
+      {isDragging && (
+        <div className="drop-overlay" aria-hidden="true">
+          Drop images, PDF or PPT here
+        </div>
+      )}
+
       <header className="chat-header">
         <div className="chat-header-title">
           <span className="mobile-brand-mark"><BrandMark /></span>
@@ -210,7 +328,8 @@ function Chat({
                           },
                         }}
                       >
-                        {chatMessage.content}
+                        {/* CHANGED: text without the PDF/PPT link (the file card shows it) */}
+                        {stripFileLinks(chatMessage.content)}
                       </ReactMarkdown>
                     </div>
 
@@ -233,6 +352,37 @@ function Chat({
                           ↓ Download
                         </a>
                       </figure>
+                    )}
+
+                    {/* NEW: PDF / PPT file card */}
+                    {extractFileLinks(chatMessage.content).length > 0 && (
+                      <div className="message-files" aria-label="Generated documents">
+                        {extractFileLinks(chatMessage.content).map((file) => (
+                          <a
+                            className={`message-file-card ${file.type}`}
+                            key={file.url}
+                            href={
+                              file.url.includes('/upload/')
+                                ? file.url.replace('/upload/', '/upload/fl_attachment/')
+                                : file.url
+                            }
+                            download={file.name}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <span className="message-file-icon" aria-hidden="true">
+                              {file.type === 'pdf' ? 'PDF' : 'PPT'}
+                            </span>
+                            <span className="message-file-info">
+                              <strong>{file.name}</strong>
+                              <small>
+                                {file.type === 'pdf' ? 'PDF document' : 'PowerPoint presentation'}
+                              </small>
+                            </span>
+                            <span className="message-file-download" aria-hidden="true">↓</span>
+                          </a>
+                        ))}
+                      </div>
                     )}
 
                     {extractCodeArtifacts(chatMessage.content, index, chatMessage.artifact).length > 0 && (
@@ -352,6 +502,44 @@ function Chat({
           </div>
         )}
         <form className="message-composer" onSubmit={handleSubmit}>
+          {/* NEW: hidden file picker (opened by the + button) */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            hidden
+            multiple
+            accept="image/*,.pdf,.ppt,.pptx"
+            onChange={(event) => {
+              addFiles(event.target.files)
+              event.target.value = '' // allows choosing the same file again
+            }}
+          />
+
+          {/* NEW: chips for the attached files */}
+          {attachedFiles.length > 0 && (
+            <div className="attached-files">
+              {attachedFiles.map((item) => (
+                <div className="attached-file" key={item.id}>
+                  {item.preview ? (
+                    <img src={item.preview} alt="" />
+                  ) : (
+                    <span className="attached-file-badge">
+                      {item.file.name.toLowerCase().endsWith('.pdf') ? 'PDF' : 'PPT'}
+                    </span>
+                  )}
+                  <span className="attached-file-name">{item.file.name}</span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${item.file.name}`}
+                    onClick={() => removeFile(item.id)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <textarea
             ref={composerRef}
             aria-label="Message Multitask AI"
@@ -359,6 +547,7 @@ function Chat({
             rows="1"
             value={message}
             onChange={(event) => setMessage(event.target.value)}
+            onPaste={handlePaste}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault()
@@ -368,7 +557,14 @@ function Chat({
           />
           <div className="composer-toolbar">
             <div className="composer-tools">
-              <button type="button" aria-label="Add attachment" title="Add attachment">＋</button>
+              {/* CHANGED: the + button now opens the file picker */}
+              <button
+                type="button"
+                aria-label="Add attachment"
+                title="Add attachment"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isSending}
+              >＋</button>
               <span className="composer-divider" />
               <button className="tool-label" type="button">
                 <span aria-hidden="true">✧</span> Tools
@@ -380,7 +576,7 @@ function Chat({
               <button
                 className="send-button"
                 type="submit"
-                disabled={!message.trim() || isSending || isRateLimited}
+                disabled={(!message.trim() && attachedFiles.length === 0) || isSending || isRateLimited}
                 aria-label={isEditingMessage ? 'Save edited message' : 'Send message'}
                 title={isEditingMessage ? 'Save edited message' : 'Send message'}
               >

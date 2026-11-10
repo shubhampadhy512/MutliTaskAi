@@ -36,6 +36,7 @@ export const Agent = async (req, res) => {
         const skipFormatter =
             result.agent === "image" ||
             result.agent === "pdf" ||
+            result.agent === "search" ||
             !!result.image ||
             !result.aiResponse ||
             result.aiResponse.length < 40;

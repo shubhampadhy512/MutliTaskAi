@@ -3,9 +3,17 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { TavilySearch } from "@langchain/tavily";
 import { ChatOpenAI } from "@langchain/openai";
 
+// Main chat model (big)
 const groq = new ChatGroq({
     model: "openai/gpt-oss-120b",
     apiKey: process.env.GROQ_API_KEY,
+});
+
+// NEW: small model for the router (saves your daily Groq tokens)
+const groqSmall = new ChatGroq({
+    model: "openai/gpt-oss-20b",
+    apiKey: process.env.GROQ_API_KEY,
+    temperature: 0,
 });
 
 const geminiCodingMain = new ChatGoogleGenerativeAI({
@@ -15,21 +23,27 @@ const geminiCodingMain = new ChatGoogleGenerativeAI({
     maxRetries: 2,
 });
 
-// FIX: ChatOpenAI needs configuration.baseURL, not base_url
 const openrouter = new ChatOpenAI({
-    model: "mistralai/devstral-2:free", // check OpenRouter's current :free list
+    model: "mistralai/devstral-2:free",
     apiKey: process.env.OPENROUTER_API_KEY,
     configuration: { baseURL: "https://openrouter.ai/api/v1" },
     temperature: 0.2,
 });
 
-// Coding: Gemini first, OpenRouter if Gemini fails (503/429)
-const geminiCoding = geminiCodingMain.withFallbacks({ fallbacks: [openrouter] });
+// Coding: Gemini, then OpenRouter, then Groq
+const geminiCoding = geminiCodingMain.withFallbacks({
+    fallbacks: [openrouter, groq],
+});
 
-const gemini_pdf = new ChatGoogleGenerativeAI({
-    model: "gemini-flash-latest", // gemini-2.5-flash may be retired
+const gemini_pdf_main = new ChatGoogleGenerativeAI({
+    model: "gemini-flash-latest",
     apiKey: process.env.GOOGLE_API_KEY,
-    maxRetries: 2,
+    maxRetries: 1, // fail faster, then use the backup
+});
+
+// NEW: PDF and PPT: Gemini, then Groq, then OpenRouter
+const gemini_pdf = gemini_pdf_main.withFallbacks({
+    fallbacks: [groq, openrouter],
 });
 
 const tavilysearch = new TavilySearch({
@@ -38,11 +52,12 @@ const tavilysearch = new TavilySearch({
 });
 
 export const getModel = async (agent) => {
-
     console.log(`getModel("${agent}") `);
     switch (agent) {
         case "chat":
             return groq;
+        case "router":
+            return groqSmall; // CHANGED: before, the router used the big model
         case "search":
             return tavilysearch;
         case "coding":
@@ -53,4 +68,4 @@ export const getModel = async (agent) => {
         default:
             return groq;
     }
-}
+};
