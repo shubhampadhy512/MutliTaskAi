@@ -31,9 +31,9 @@ function Home() {
   const [isResizingArtifacts, setIsResizingArtifacts] = useState(false)
   const [artifactTab, setArtifactTab] = useState('code')
   const [selectedArtifact, setSelectedArtifact] = useState(null)
+  // NEW: mobile drawer
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const dispatch = useDispatch();
-  // const selector = useSelector((prev) => prev.user)
-
 
   const startNewChat = () => {
     setActiveConversation('')
@@ -43,6 +43,7 @@ function Home() {
     setSelectedArtifact(null)
     setIsArtifactPanelOpen(false)
     setMessage('')
+    setIsSidebarOpen(false) // NEW: close drawer
   }
 
   const showArtifact = (artifact) => {
@@ -101,13 +102,22 @@ function Home() {
     }
   }, [isResizingArtifacts])
 
+  // NEW: Escape closes the mobile drawer
+  useEffect(() => {
+    if (!isSidebarOpen) return undefined
+    const onKey = (event) => {
+      if (event.key === 'Escape') setIsSidebarOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isSidebarOpen])
+
   const loadConversations = useCallback(async () => {
     setIsLoadingConversations(true)
     setHistoryError('')
 
     try {
       const { data } = await api.get('/chat/get-conversation')
-      console.log(data)
       if (!Array.isArray(data)) {
         throw new Error('The chat service returned an invalid conversation list.')
       }
@@ -139,7 +149,7 @@ function Home() {
 
     getUser()
   }, [dispatch, loadConversations])
-  // console.log(user)
+
   const handleLogout = async () => {
     setIsLoggingOut(true)
     setIsAccountMenuOpen(false)
@@ -156,7 +166,6 @@ function Home() {
     }
   }
 
-  // CHANGE 1: accept files as the second value
   const handleSendMessage = async (prompt, files = []) => {
     if (isSending || isRateLimited) return
 
@@ -241,7 +250,6 @@ function Home() {
         }
       }
 
-      // CHANGE 2: send FormData when there are files, old JSON when there are none
       let requestBody = { conversationId: activeConversationId, prompt }
       if (files.length > 0) {
         requestBody = new FormData()
@@ -263,7 +271,6 @@ function Home() {
           {
             ...lastMessage,
             messageId: data?.userMessageId || null,
-            // CHANGE 3: keep the saved file links
             attachments: data?.attachments || [],
           },
           {
@@ -294,6 +301,7 @@ function Home() {
     const selectedConversationId = conversation?._id
     if (!selectedConversationId || isSending) return
 
+    setIsSidebarOpen(false) // NEW: close drawer
     setConversationId(selectedConversationId)
     setActiveConversation(conversation.title || 'New Chat')
     setMessages([])
@@ -320,7 +328,6 @@ function Home() {
         content: chatMessage.content,
         artifact: chatMessage.artifact || null,
         image: chatMessage.image || null,
-        // CHANGE 4: load the files after refresh
         attachments: chatMessage.attachments || [],
       })))
     } catch (error) {
@@ -415,7 +422,48 @@ function Home() {
       className={`ai-workspace${isArtifactPanelOpen ? ' artifacts-open' : ''}${isResizingArtifacts ? ' artifacts-resizing' : ''}`}
       style={{ '--artifact-width': `${artifactPanelWidth}px` }}
     >
-      <aside className="ai-sidebar">
+      {/* NEW: navbar, only visible on phones */}
+      <header className="mobile-topbar">
+        <button
+          type="button"
+          className="mobile-menu-btn"
+          aria-label="Open chat history"
+          aria-expanded={isSidebarOpen}
+          onClick={() => setIsSidebarOpen(true)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+
+        <a className="mobile-brand" href="/home" aria-label="MultiTask AI home">
+          <span className="ai-brand-mark"><BrandMark /></span>
+          <span>MultiTask<span className="ai-brand-accent">Ai</span></span>
+        </a>
+
+        <button
+          type="button"
+          className="mobile-menu-btn"
+          aria-label="New chat"
+          onClick={startNewChat}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+      </header>
+
+      {/* NEW: dark layer behind the drawer */}
+      {isSidebarOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close chat history"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      <aside className={`ai-sidebar${isSidebarOpen ? ' open' : ''}`}>
         <a className="ai-brand" href="/home" aria-label="MultiTask AI home">
           <span className="ai-brand-mark"><BrandMark /></span>
           <span>MultiTask<span className="ai-brand-accent">Ai</span></span>

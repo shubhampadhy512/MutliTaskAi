@@ -669,9 +669,11 @@
   .ai-workspace {
     grid-template-columns: 284px minmax(0, 1fr);
   }
+
   .ai-workspace.artifacts-open {
     grid-template-columns: 284px minmax(0, 1fr) var(--artifact-width, 360px);
   }
+
   .ai-sidebar {
     padding-right: 17px;
     padding-left: 17px;
@@ -682,6 +684,7 @@
   .ai-workspace {
     grid-template-columns: 220px minmax(0, 1fr);
   }
+
   .ai-workspace.artifacts-open {
     grid-template-columns: 220px minmax(0, 1fr);
   }
@@ -698,6 +701,7 @@
     display: flex;
     flex-direction: column;
   }
+
   .ai-sidebar {
     display: grid;
     height: 58px;
@@ -723,10 +727,12 @@
   .ai-brand>span:last-child {
     display: none;
   }
+
   .ai-sidebar>.new-chat-button {
     grid-column: 2;
     grid-row: 1;
   }
+
   .recent-section {
     grid-column: 3;
     grid-row: 1;
@@ -736,9 +742,11 @@
     margin: 0;
     overflow: hidden;
   }
+
   .recent-heading {
     display: none;
   }
+
   .conversation-list {
     display: flex;
     gap: 5px;
@@ -754,19 +762,23 @@
     display: none;
     outline: none;
   }
+
   .conversation-link {
     width: auto;
     max-width: 122px;
     min-width: 90px;
     flex: 0 1 auto;
   }
+
   .conversation-item {
     max-width: 165px;
     flex: 0 0 auto;
   }
+
   .conversation-delete {
     opacity: 1;
   }
+
   .new-chat-button {
     height: 35px;
     justify-content: center;
@@ -774,27 +786,33 @@
     padding: 0 8px;
     white-space: nowrap;
   }
+
   .new-chat-button kbd {
     display: none;
   }
+
   .sidebar-bottom {
     grid-column: 4;
     grid-row: 1;
     position: static;
     margin: 0;
   }
+
   .account-row {
     width: auto;
     gap: 6px;
     padding: 0;
     border: 0;
   }
+
   .account-info {
     display: none;
   }
+
   .account-chevron {
     display: none;
   }
+
   .account-popover {
     right: -48px;
     left: auto;
@@ -805,14 +823,14 @@
 @media (prefers-reduced-motion: reduce) {
 
   *,
-*::before,
-*::after {
+  *::before,
+  *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
 
   .loading-shimmer,
-.loading-typing-dots i {
+  .loading-typing-dots i {
     animation: none;
   }
 
@@ -859,4 +877,264 @@
 
 .logout-button {
   font-size: 13px;
+}
+
+
+/* ==========================================================
+   Responsive: mobile navbar + slide-in sidebar drawer
+   ========================================================== */
+
+/* hidden on laptop/desktop */
+.mobile-topbar,
+.sidebar-backdrop {
+  display: none;
+}
+
+/* Tablet: slightly narrower sidebar */
+@media (min-width: 761px) and (max-width: 1024px) {
+
+  .ai-workspace,
+  .ai-workspace.artifacts-open {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+}
+
+/* Phone and small tablet */
+@media (max-width: 760px) {
+
+  .ai-workspace,
+  .ai-workspace.artifacts-open {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ----- navbar ----- */
+  .mobile-topbar {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    height: calc(56px + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) 12px 0;
+    border-bottom: 1px solid var(--line);
+    background: #0d0d14;
+  }
+
+  .mobile-menu-btn {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    place-items: center;
+    padding: 0;
+    border: 1px solid rgba(194, 179, 255, 0.19);
+    border-radius: 10px;
+    color: #eeebf7;
+    background: linear-gradient(105deg, rgba(125, 98, 212, 0.17), rgba(91, 73, 158, 0.08));
+    cursor: pointer;
+  }
+
+  .mobile-menu-btn:active {
+    background: rgba(125, 98, 212, 0.28);
+  }
+
+  .mobile-menu-btn svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-width: 1.8;
+  }
+
+  .mobile-brand {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 9px;
+    color: #f3f1fa;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.6px;
+    text-decoration: none;
+  }
+
+  /* chat area fills the remaining height */
+  .ai-workspace> :not(.ai-sidebar):not(.mobile-topbar):not(.sidebar-backdrop) {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* ----- sidebar becomes a drawer (same layout as laptop) ----- */
+  .ai-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    display: flex;
+    width: min(300px, 86vw);
+    height: auto;
+    flex-direction: column;
+    padding: calc(23px + env(safe-area-inset-top, 0px)) 17px calc(13px + env(safe-area-inset-bottom, 0px));
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+    box-shadow: 12px 0 40px rgba(0, 0, 0, 0.5);
+    transform: translateX(-105%);
+    visibility: hidden;
+    transition: transform 260ms ease, visibility 260ms;
+  }
+
+  .ai-sidebar.open {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: block;
+    padding: 0;
+    border: 0;
+    background: rgba(0, 0, 0, 0.6);
+    animation: backdrop-in 200ms ease both;
+  }
+
+  @keyframes backdrop-in {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* touch screens have no hover, so always show the delete icon */
+  .conversation-delete {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .ai-sidebar,
+  .sidebar-backdrop {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* ==========================================================
+   Drawer fix: restore the full laptop sidebar layout on phones
+   (put at the VERY END of Home.css)
+   ========================================================== */
+@media (max-width: 760px) {
+  .ai-sidebar {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: none;
+    align-items: stretch;
+    gap: 0;
+    height: auto;
+    min-height: 0;
+    flex: none;
+    overflow: hidden;
+  }
+
+  .ai-sidebar .ai-brand {
+    grid-column: auto;
+    grid-row: auto;
+    width: fit-content;
+    margin: 0 7px 29px;
+    justify-content: flex-start;
+  }
+
+  .ai-sidebar .ai-brand>span:last-child {
+    display: inline;
+  }
+
+  .ai-sidebar>.new-chat-button {
+    grid-column: auto;
+    grid-row: auto;
+    height: 41px;
+    justify-content: flex-start;
+    gap: 9px;
+    padding: 0 10px;
+  }
+
+  .ai-sidebar .new-chat-button kbd {
+    display: none;
+    /* no keyboard shortcut on phones */
+  }
+
+  .ai-sidebar .recent-section {
+    grid-column: auto;
+    grid-row: auto;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    margin: 29px 0 0;
+    overflow: hidden;
+  }
+
+  .ai-sidebar .recent-heading {
+    display: flex;
+  }
+
+  .ai-sidebar .conversation-list {
+    display: grid;
+    gap: 3px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .ai-sidebar .conversation-item {
+    max-width: none;
+    flex: none;
+  }
+
+  .ai-sidebar .conversation-link {
+    min-width: 0;
+    max-width: none;
+    height: 40px;
+    flex: 1 1 auto;
+  }
+
+  .ai-sidebar .sidebar-bottom {
+    grid-column: auto;
+    grid-row: auto;
+    position: static;
+    margin: auto 0 0;
+  }
+
+  .ai-sidebar .account-row {
+    width: 100%;
+    gap: 9px;
+    padding: 11px 3px 1px;
+    border: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .ai-sidebar .account-info {
+    display: grid;
+  }
+
+  .ai-sidebar .account-chevron {
+    display: inline;
+  }
+
+  .ai-sidebar .account-popover {
+    top: auto;
+    right: 0;
+    bottom: calc(100% + 8px);
+    left: 0;
+    width: auto;
+  }
 }
